@@ -11,10 +11,12 @@ find_package(glfw3 3.3 REQUIRED)
 
 include_directories(include)
 
-# Add the executable with its source files, including glad.c
+# Add the executable with all its source files
 add_executable(${PROJECT_NAME} 
     src/main.cpp 
     src/glad.c
+    src/Shader.cpp
+    src/Camera.cpp
 )
 
 file(COPY shaders DESTINATION ${CMAKE_BINARY_DIR})
