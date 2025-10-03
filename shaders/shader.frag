@@ -1,23 +1,26 @@
-#version 330 core
+#version 460 core
 out vec4 FragColor;
-in vec2 TexCoord;
-uniform sampler2D videoTexture;
 
-// Uniform variable for time, passed from C++
-uniform float time;
+// This line is changed
+in vec2 TexCoord; // Was 'texCoord'
 
-void main() {
-    // --- Wavy Effect Parameters ---
-    float amplitude = 0.02; // How much the wave displaces the pixels
-    float frequency = 15.0; // How many waves are on the screen
-    float speed = 2.0;      // How fast the waves move
+uniform sampler2D ourTexture;
+uniform vec2 resolution; // The width and height of the camera feed
 
-    // Calculate the horizontal offset using a sine wave
-    float xOffset = amplitude * sin(TexCoord.y * frequency + time * speed);
+void main()
+{
+    // Define the size of the pixelation blocks (e.g., 8x8 pixels)
+    float pixelSize = 32.0;
 
-    // Create new, distorted texture coordinates
-    vec2 wavyCoords = vec2(TexCoord.x + xOffset, TexCoord.y);
+    // 1. Convert normalized texture coords (0-1) to pixel coords (e.g., 0-1920)
+    vec2 pixelCoords = TexCoord * resolution;
 
-    // Sample the texture using the new wavy coordinates
-    FragColor = texture(videoTexture, wavyCoords);
+    // 2. Snap these coordinates to the top-left of the 8x8 grid cell
+    vec2 snappedCoords = floor(pixelCoords / pixelSize) * pixelSize;
+
+    // 3. Convert the snapped pixel coords back to normalized texture coords
+    vec2 pixelatedTexCoord = snappedCoords / resolution;
+
+    // All pixels within the same 8x8 cell will now sample from the same coordinate
+    FragColor = texture(ourTexture, pixelatedTexCoord);
 }

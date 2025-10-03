@@ -91,6 +91,8 @@ int main() {
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
 
+    GLint resolutionLocation = glGetUniformLocation(shaderProgram, "resolution");
+
     // 7. Vertex data for a screen-filling quad
     float vertices[] = {
           // positions         // texture coords (V flipped)
@@ -140,6 +142,9 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(shaderProgram);
+
+        glUniform2f(resolutionLocation, (float)frame.cols, (float)frame.rows);
+
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
