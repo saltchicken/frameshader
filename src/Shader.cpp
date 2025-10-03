@@ -3,6 +3,11 @@
 #include <sstream>
 #include <iostream>
 
+Shader::~Shader() {
+  glDeleteProgram(ID);
+  std::cout << "Shader destructor called. Deleting program ID: " << ID << std::endl;
+}
+
 Shader::Shader(const char* vertexPath, const char* fragmentPath) {
     // 1. Retrieve the vertex/fragment source code from filePath
     std::string vertexCode;
