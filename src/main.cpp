@@ -3,6 +3,7 @@
 #include <GLFW/glfw3.h>
 #include "Shader.h"
 #include "Camera.h"
+#include <opencv2/imgcodecs.hpp>
 
 // GLFW Callbacks
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
@@ -13,6 +14,37 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, true);
     }
+}
+
+// Helper function to load an image into an OpenGL texture
+void loadTexture(const char* path, GLuint& textureID, GLenum textureUnit) {
+    glGenTextures(1, &textureID);
+    glActiveTexture(textureUnit);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+
+    // Set texture wrapping/filtering options
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // Load image using OpenCV
+    cv::Mat image = cv::imread(path, cv::IMREAD_UNCHANGED);
+    if (image.empty()) {
+        std::cerr << "Failed to load texture: " << path << std::endl;
+        return;
+    }
+
+    GLenum format = GL_RGB;
+    if (image.channels() == 4) {
+        format = GL_RGBA;
+        cv::cvtColor(image, image, cv::COLOR_BGRA2RGBA);
+    } else {
+        cv::cvtColor(image, image, cv::COLOR_BGR2RGB);
+    }
+
+    glTexImage2D(GL_TEXTURE_2D, 0, format, image.cols, image.rows, 0, format, GL_UNSIGNED_BYTE, image.data);
+    glGenerateMipmap(GL_TEXTURE_2D);
 }
 
 int main() {
@@ -46,7 +78,7 @@ int main() {
     }
 
     // 4. Build and compile our shader program
-    Shader ourShader("shaders/shader.vert", "shaders/shader.frag");
+    Shader ourShader("shaders/shader.vert", "shaders/ascii.frag");
 
     // 5. Vertex data for a screen-filling quad
     float vertices[] = {
@@ -71,17 +103,25 @@ int main() {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    // 6. Create texture for the video frame
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    // 6. Create texture for the video frame and font texture
+    GLuint videoTexture;
+    glGenTextures(1, &videoTexture);
+    glActiveTexture(GL_TEXTURE0); // Activate texture unit 0
+    glBindTexture(GL_TEXTURE_2D, videoTexture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
+    GLuint fontTexture;
+    loadTexture("shaders/font.png", fontTexture, GL_TEXTURE1); // Load font into texture unit 1
+
     // 7. The Render Loop
     cv::Mat frame;
+    ourShader.use(); // Activate shader once before the loop
+    ourShader.setInt("videoTexture", 0); // Tell shader videoTexture is on unit 0
+    ourShader.setInt("fontAtlas", 1);    // Tell shader fontAtlas is on unit
+                                         //
     while (!glfwWindowShouldClose(window)) {
         if (!camera.read(frame)) {
             break;
@@ -89,6 +129,8 @@ int main() {
         cv::cvtColor(frame, frame, cv::COLOR_BGR2RGB);
         
         // Update texture data
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, videoTexture);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frame.cols, frame.rows, 0, GL_RGB, GL_UNSIGNED_BYTE, frame.data);
 
         // Rendering
@@ -97,6 +139,7 @@ int main() {
 
         ourShader.use();
         ourShader.setVec2("resolution", (float)frame.cols, (float)frame.rows);
+        ourShader.setVec2("charSize", 8.0f, 16.0f); // The size of one character block. Tweak these!
 
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -109,6 +152,8 @@ int main() {
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
     glDeleteBuffers(1, &EBO);
+    glDeleteTextures(1, &videoTexture);
+    glDeleteTextures(1, &fontTexture);
     glfwTerminate();
     return 0;
 }
