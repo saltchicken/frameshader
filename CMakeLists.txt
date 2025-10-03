@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(camirror)
+project(frameshader)
 
 cmake_policy(SET CMP0072 NEW)
 set(CMAKE_CXX_STANDARD 17)
