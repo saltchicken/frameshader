@@ -126,12 +126,11 @@ int main() {
         if (!camera.read(frame)) {
             break;
         }
-        cv::cvtColor(frame, frame, cv::COLOR_BGR2RGB);
         
         // Update texture data
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, videoTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frame.cols, frame.rows, 0, GL_RGB, GL_UNSIGNED_BYTE, frame.data);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frame.cols, frame.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, frame.data);
 
         // Rendering
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
