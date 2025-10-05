@@ -73,8 +73,8 @@ static void parse_from_args(int argc, char* argv[], AppConfig& config) {
         if (result.count("height")) {
             config.cameraHeight = result["height"].as<int>();
         }
-        if (result.count("fragment_shader")) {
-            config.fragmentShaderName = result["fragmentShader"].as<std::string>();
+        if (result.count("fragment-shader")) {
+            config.fragmentShaderName = result["fragment-shader"].as<std::string>();
         }
     } catch (const cxxopts::exceptions::exception& e) {
         std::cerr << "Error parsing options: " << e.what() << std::endl;
