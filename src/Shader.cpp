@@ -3,11 +3,6 @@
 #include <sstream>
 #include <iostream>
 
-Shader::~Shader() {
-  glDeleteProgram(ID);
-  std::cout << "Shader destructor called. Deleting program ID: " << ID << std::endl;
-}
-
 Shader::Shader(const char* vertexPath, const char* fragmentPath) {
     // 1. Retrieve the vertex/fragment source code from filePath
     std::string vertexCode;
@@ -66,29 +61,50 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath) {
     glDeleteShader(fragment);
 }
 
-void Shader::use() {
+Shader::~Shader() {
+    glDeleteProgram(ID);
+}
+
+void Shader::use() const {
     glUseProgram(ID);
 }
 
 void Shader::setBool(const std::string &name, bool value) const {
-    glUniform1i(glGetUniformLocation(ID, name.c_str()), (int)value);
+    glUniform1i(getUniformLocation(name), (int)value);
 }
 
 void Shader::setInt(const std::string &name, int value) const {
-    glUniform1i(glGetUniformLocation(ID, name.c_str()), value);
+    glUniform1i(getUniformLocation(name), value);
 }
 
 void Shader::setFloat(const std::string &name, float value) const {
-    glUniform1f(glGetUniformLocation(ID, name.c_str()), value);
+    glUniform1f(getUniformLocation(name), value);
 }
 
 void Shader::setVec2(const std::string &name, float v1, float v2) const {
-    glUniform2f(glGetUniformLocation(ID, name.c_str()), v1, v2);
+    glUniform2f(getUniformLocation(name), v1, v2);
 }
 
-void Shader::checkCompileErrors(unsigned int shader, std::string type) {
-    int success;
-    char infoLog[1024];
+GLint Shader::getUniformLocation(const std::string &name) const {
+    // Check if we already have the location cached
+    if (uniformLocationCache.find(name) != uniformLocationCache.end()) {
+        return uniformLocationCache[name];
+    }
+
+    // If not, retrieve it and store it in the cache
+    GLint location = glGetUniformLocation(ID, name.c_str());
+    if (location == -1) {
+        // It's not an error for a uniform to be unused, so we'll just warn.
+        std::cout << "Warning: uniform '" << name << "' not found in shader program " << ID << "." << std::endl;
+    }
+    
+    uniformLocationCache[name] = location;
+    return location;
+}
+
+void Shader::checkCompileErrors(GLuint shader, std::string type) {
+    GLint success;
+    GLchar infoLog[1024];
     if (type != "PROGRAM") {
         glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
         if (!success) {
