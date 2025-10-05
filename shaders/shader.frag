@@ -4,7 +4,7 @@ out vec4 FragColor;
 // This line is changed
 in vec2 TexCoord; // Was 'texCoord'
 
-uniform sampler2D ourTexture;
+uniform sampler2D videoTexture;
 uniform vec2 resolution; // The width and height of the camera feed
 
 void main()
