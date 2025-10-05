@@ -28,16 +28,9 @@ add_library(OpenCV_lib INTERFACE)
 target_include_directories(OpenCV_lib INTERFACE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(OpenCV_lib INTERFACE ${OpenCV_LIBS})
 
+file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.c")
 
-add_executable(${PROJECT_NAME} 
-    src/main.cpp
-    src/glad.c
-    src/Shader.cpp
-    src/Camera.cpp
-    src/Config.cpp
-    src/ShaderManager.cpp
-    src/TextureUtils.cpp
-)
+add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE 
     include
