@@ -1,5 +1,4 @@
-#ifndef CAMERA_H
-#define CAMERA_H
+#pragma once
 
 #include <opencv2/opencv.hpp>
 
@@ -19,5 +18,3 @@ private:
     int frameWidth;
     int frameHeight;
 };
-
-#endif

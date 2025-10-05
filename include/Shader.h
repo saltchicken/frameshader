@@ -1,5 +1,4 @@
-#ifndef SHADER_H
-#define SHADER_H
+#pragma once
 
 #include <glad/glad.h>
 #include <string>
@@ -27,4 +26,3 @@ private:
     void checkCompileErrors(unsigned int shader, std::string type);
 };
 
-#endif
