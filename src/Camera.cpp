@@ -2,7 +2,7 @@
 #include <iostream>
 
 Camera::Camera(int deviceID, int width, int height) {
-    cap.open(deviceID);
+    cap.open(deviceID, cv::CAP_V4L2);
     if (!cap.isOpened()) {
         std::cerr << "ERROR: Could not open camera." << std::endl;
         return;
