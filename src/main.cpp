@@ -85,7 +85,8 @@ int main(int argc, char* argv[]) {
     }
 
     // 4. Build and compile our shader program
-    Shader ourShader("shaders/shader.vert", "shaders/ascii.frag");
+    std::string fragmentShaderPath = "shaders/" + config.shaderName + ".frag";
+    Shader ourShader("shaders/shader.vert", fragmentShaderPath.c_str());
 
     // 5. Vertex data for a screen-filling quad
     float vertices[] = {
@@ -120,14 +121,18 @@ int main(int argc, char* argv[]) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    GLuint fontTexture;
-    loadTexture("shaders/font.png", fontTexture, GL_TEXTURE1); // Load font into texture unit 1
+    GLuint fontTexture = 0;
+    if (config.shaderName == "ascii") { // Only load font texture if using the ASCII shader
+      loadTexture("shaders/font.png", fontTexture, GL_TEXTURE1); // Load font into texture unit 1
+    }
 
     // 7. The Render Loop
     cv::Mat frame;
     ourShader.use(); // Activate shader once before the loop
     ourShader.setInt("videoTexture", 0); // Tell shader videoTexture is on unit 0
-    ourShader.setInt("fontAtlas", 1);    // Tell shader fontAtlas is on unit
+    if (config.shaderName == "ascii") {
+      ourShader.setInt("fontAtlas", 1);    // Tell shader fontAtlas is on unit
+    }
                                          //
     while (!glfwWindowShouldClose(window)) {
         if (!camera.read(frame)) {
@@ -144,8 +149,14 @@ int main(int argc, char* argv[]) {
         glClear(GL_COLOR_BUFFER_BIT);
 
         ourShader.use();
-        ourShader.setVec2("resolution", (float)frame.cols, (float)frame.rows);
-        ourShader.setVec2("charSize", 8.0f, 16.0f); // The size of one character block. Tweak these!
+        if (config.shaderName == "pixelate") {
+            ourShader.setVec2("resolution", (float)frame.cols, (float)frame.rows);
+        } else if (config.shaderName == "wavy") {
+            ourShader.setFloat("time", (float)glfwGetTime());
+        } else if (config.shaderName == "ascii") {
+            ourShader.setVec2("resolution", (float)frame.cols, (float)frame.rows);
+            ourShader.setVec2("charSize", 8.0f, 16.0f);
+        }
 
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -159,7 +170,9 @@ int main(int argc, char* argv[]) {
     glDeleteBuffers(1, &VBO);
     glDeleteBuffers(1, &EBO);
     glDeleteTextures(1, &videoTexture);
-    glDeleteTextures(1, &fontTexture);
+    if (fontTexture != 0) {
+      glDeleteTextures(1, &fontTexture);
+    }
     glfwTerminate();
     return 0;
 }

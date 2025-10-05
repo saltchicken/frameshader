@@ -21,6 +21,11 @@ static int config_handler(void* user, const char* section, const char* name,
             pconfig->cameraHeight = std::stoi(value);
         }
     }
+    else if (std::string(section) == "shader") {
+      if (std::string(name) == "name") {
+              pconfig->shaderName = std::string(value);
+          }
+      }
     return 1;
 }
 
@@ -34,8 +39,7 @@ static void load_from_ini(AppConfig& config) {
     std::string configPath = std::string(homeDir) + "/.config/frame_shader/config.ini";
 
     if (ini_parse(configPath.c_str(), config_handler, &config) < 0) {
-        // This is not an error if the file doesn't exist.
-        // The program will proceed with default values.
+    // TODO: Make sure that the absence of a config file is not fatal
         std::cout << "No config file found at " << configPath << ". Using defaults." << std::endl;
     }
 }
@@ -48,6 +52,8 @@ static void parse_from_args(int argc, char* argv[], AppConfig& config) {
             ("d,device", "Camera device ID", cxxopts::value<int>())
             ("w,width", "Camera frame width", cxxopts::value<int>())
             ("h,height", "Camera frame height", cxxopts::value<int>())
+            // TODO: Add all shader options
+            ("s,shader", "Shader name (pixelate, wave, ascii", cxxopts::value<std::string>())
             ("help", "Print help");
 
         auto result = options.parse(argc, argv);
@@ -66,6 +72,9 @@ static void parse_from_args(int argc, char* argv[], AppConfig& config) {
         }
         if (result.count("height")) {
             config.cameraHeight = result["height"].as<int>();
+        }
+        if (result.count("shader")) {
+            config.shaderName = result["shader"].as<std::string>();
         }
     } catch (const cxxopts::exceptions::exception& e) {
         std::cerr << "Error parsing options: " << e.what() << std::endl;
