@@ -21,7 +21,7 @@ static int config_handler(void* user, const char* section, const char* name,
             pconfig->cameraHeight = std::stoi(value);
         }
     }
-    return 1; // Return 1 on success
+    return 1;
 }
 
 // Internal function to load settings from our config file
