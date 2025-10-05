@@ -35,6 +35,8 @@ add_executable(${PROJECT_NAME}
     src/Shader.cpp
     src/Camera.cpp
     src/Config.cpp
+    src/ShaderManager.cpp
+    src/TextureUtils.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE 

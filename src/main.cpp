@@ -5,6 +5,7 @@
 #include "Shader.h"
 #include "Camera.h"
 #include "Config.h"
+#include "ShaderManager.h"
 
 // GLFW Callbacks
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
@@ -16,41 +17,6 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         glfwSetWindowShouldClose(window, true);
     }
 }
-
-// Helper function to load an image into an OpenGL texture
-void loadTexture(const char* path, GLuint& textureID, GLenum textureUnit) {
-    glGenTextures(1, &textureID);
-    glActiveTexture(textureUnit);
-    glBindTexture(GL_TEXTURE_2D, textureID);
-
-    // Set texture wrapping/filtering options
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    // Tell OpenGL how to unpack the pixel data (byte-by-byte)
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
-    // Load image using OpenCV
-    cv::Mat image = cv::imread(path, cv::IMREAD_UNCHANGED);
-    if (image.empty()) {
-        std::cerr << "Failed to load texture: " << path << std::endl;
-        return;
-    }
-
-    GLenum format = GL_RGB;
-    if (image.channels() == 4) {
-        format = GL_RGBA;
-        cv::cvtColor(image, image, cv::COLOR_BGRA2RGBA);
-    } else {
-        cv::cvtColor(image, image, cv::COLOR_BGR2RGB);
-    }
-
-    glTexImage2D(GL_TEXTURE_2D, 0, format, image.cols, image.rows, 0, format, GL_UNSIGNED_BYTE, image.data);
-    glGenerateMipmap(GL_TEXTURE_2D);
-}
-
 
 int main(int argc, char* argv[]) {
     AppConfig config = load_configuration(argc, argv);
@@ -87,6 +53,9 @@ int main(int argc, char* argv[]) {
     // 4. Build and compile our shader program
     std::string fragmentShaderPath = "shaders/" + config.fragmentShaderName + ".frag";
     Shader ourShader("shaders/shader.vert", fragmentShaderPath.c_str());
+
+    auto currentEffect = ShaderManager::createEffect(config.fragmentShaderName);
+    currentEffect->loadAssets();
 
     // 5. Vertex data for a screen-filling quad
     float vertices[] = {
@@ -132,18 +101,11 @@ int main(int argc, char* argv[]) {
     // Allocate texture memory on GPU with the first frame
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frame.cols, frame.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, frame.data);
 
-    // --- Step 6.2: Now load any other textures needed ---
-    GLuint fontTexture = 0;
-    if (config.fragmentShaderName == "ascii") {
-        loadTexture("shaders/font.png", fontTexture, GL_TEXTURE1);
-    }
 
     // 7. Final setup before the Render Loop
     ourShader.use();
     ourShader.setInt("videoTexture", 0);
-    if (config.fragmentShaderName == "ascii") {
-        ourShader.setInt("fontAtlas", 1);
-    }
+    currentEffect->setup(ourShader, FRAME_WIDTH, FRAME_HEIGHT);
     
     // The Render Loop
     while (!glfwWindowShouldClose(window)) {
@@ -151,8 +113,6 @@ int main(int argc, char* argv[]) {
 
         // Update the video texture with the current frame's data
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, videoTexture);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, frame.cols, frame.rows, GL_BGR, GL_UNSIGNED_BYTE, frame.data);
 
         // Rendering commands
@@ -160,16 +120,7 @@ int main(int argc, char* argv[]) {
         glClear(GL_COLOR_BUFFER_BIT);
 
         ourShader.use();
-        // Set shader-specific uniforms that change each frame
-        if (config.fragmentShaderName == "wavy") {
-            ourShader.setFloat("time", (float)glfwGetTime());
-        } else if (config.fragmentShaderName == "ascii" || config.fragmentShaderName == "pixelate") {
-            // These uniforms don't change, but setting them here is fine
-            ourShader.setVec2("resolution", (float)frame.cols, (float)frame.rows);
-            if(config.fragmentShaderName == "ascii") {
-                ourShader.setVec2("charSize", 8.0f, 16.0f);
-            }
-        }
+        currentEffect->update(ourShader, FRAME_WIDTH, FRAME_HEIGHT);
 
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -188,10 +139,6 @@ int main(int argc, char* argv[]) {
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
     glDeleteBuffers(1, &EBO);
-    glDeleteTextures(1, &videoTexture);
-    if (fontTexture != 0) {
-        glDeleteTextures(1, &fontTexture);
-    }
     glfwTerminate();
     return 0;
 }
