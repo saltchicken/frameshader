@@ -64,7 +64,7 @@ void Application::init() {
     // 5. Build and compile our shader program
     std::string fragmentShaderPath = "shaders/" + m_config.fragmentShaderName + ".frag";
     m_shader = std::make_unique<Shader>("shaders/shader.vert", fragmentShaderPath.c_str());
-    m_effect = ShaderManager::createEffect(m_config.fragmentShaderName);
+    m_effect = ShaderManager::createEffect(m_config.fragmentShaderName, m_config);
     m_effect->loadAssets();
 
     // 6. Final shader setup

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Shader.h"
+#include "Config.h"
 #include <string>
 #include <memory>
 
@@ -32,5 +33,5 @@ class ShaderManager {
 public:
     // Creates and returns a shader effect object based on the name.
     // Returns a "noop" (no-operation) effect if the name is not found.
-    static std::unique_ptr<ShaderEffect> createEffect(const std::string& effectName);
+    static std::unique_ptr<ShaderEffect> createEffect(const std::string& effectName, const AppConfig& config);
 };

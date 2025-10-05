@@ -6,7 +6,11 @@ struct AppConfig {
   int cameraWidth = 1920;
   int cameraHeight = 1080;
 
-  std::string fragmentShaderName = "pixelate";
+  std::string fragmentShaderName = "ascii";
+
+  // ASCII Effect-specific settings
+  float asciiCharWidth = 8.0f;
+  float asciiCharHeight = 16.0f;
 
 };
 

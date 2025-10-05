@@ -28,6 +28,9 @@ public:
 
 class AsciiEffect : public ShaderEffect {
 public:
+    AsciiEffect(float charWidth, float charHeight) 
+          : m_charWidth(charWidth), m_charHeight(charHeight) {}
+
     ~AsciiEffect() override {
         if (fontTexture != 0) {
             glDeleteTextures(1, &fontTexture);
@@ -43,18 +46,21 @@ public:
         // This shader needs to know about the second texture unit
         shader.setInt("fontAtlas", 1);
         shader.setVec2("resolution", (float)frameWidth, (float)frameHeight);
-        shader.setVec2("charSize", 8.0f, 16.0f);
+        shader.setVec2("charSize", m_charWidth, m_charHeight);
     }
 
 private:
     GLuint fontTexture = 0;
+
+    float m_charWidth;
+    float m_charHeight;
 };
 
 } // end anonymous namespace
 
 // --- ShaderManager Factory Implementation ---
 
-std::unique_ptr<ShaderEffect> ShaderManager::createEffect(const std::string& effectName) {
+std::unique_ptr<ShaderEffect> ShaderManager::createEffect(const std::string& effectName, const AppConfig& config) {
     if (effectName == "pixelate") {
         return std::make_unique<PixelateEffect>();
     }
@@ -62,7 +68,7 @@ std::unique_ptr<ShaderEffect> ShaderManager::createEffect(const std::string& eff
         return std::make_unique<WavyEffect>();
     }
     if (effectName == "ascii") {
-        return std::make_unique<AsciiEffect>();
+        return std::make_unique<AsciiEffect>(config.asciiCharWidth, config.asciiCharHeight);
     }
     
     std::cerr << "Unknown shader effect name: '" << effectName << "'. Using default." << std::endl;
