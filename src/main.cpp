@@ -1,9 +1,13 @@
 #include <iostream>
+#include <string>
+#include <cstdlib>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "Shader.h"
 #include "Camera.h"
-#include <opencv2/imgcodecs.hpp>
+#include "Config.h"
+#include <cxxopts.hpp>
+#include <ini.h>
 
 // GLFW Callbacks
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
@@ -47,9 +51,79 @@ void loadTexture(const char* path, GLuint& textureID, GLenum textureUnit) {
     glGenerateMipmap(GL_TEXTURE_2D);
 }
 
-int main() {
+// The callback for the INI parser
+static int config_handler(void* user, const char* section, const char* name,
+                          const char* value) {
+    AppConfig* pconfig = (AppConfig*)user;
+
+    // We only care about the [camera] section for now
+    if (std::string(section) == "camera") {
+        if (std::string(name) == "device") {
+            pconfig->cameraDeviceID = std::stoi(value);
+        } else if (std::string(name) == "width") {
+            pconfig->cameraWidth = std::stoi(value);
+        } else if (std::string(name) == "height") {
+            pconfig->cameraHeight = std::stoi(value);
+        }
+    }
+    return 1; // Return 1 on success
+}
+
+// Function to load settings from our config file
+void load_config_from_file(AppConfig& config) {
+    const char* homeDir = getenv("HOME");
+    if (!homeDir) {
+        std::cerr << "Could not get HOME directory." << std::endl;
+        return;
+    }
+    std::string configPath = std::string(homeDir) + "/.config/frame_shader/config.ini";
+
+    if (ini_parse(configPath.c_str(), config_handler, &config) < 0) {
+        // This is not an error, the file might just not exist.
+        // The program will proceed with default values.
+        std::cout << "No config file found at " << configPath << ". Using defaults." << std::endl;
+    }
+}
+
+void parse_arguments(int argc, char* argv[], AppConfig& config) {
+    cxxopts::Options options(argv[0], "A real-time camera shader application");
+    options.add_options()
+        ("d,device", "Camera device ID", cxxopts::value<int>())
+        ("w,width", "Camera frame width", cxxopts::value<int>())
+        ("h,height", "Camera frame height", cxxopts::value<int>())
+        ("help", "Print help");
+
+    auto result = options.parse(argc, argv);
+
+    if (result.count("help")) {
+        std::cout << options.help() << std::endl;
+        exit(0);
+    }
+    
+    // Only update config if the argument was actually passed
+    if (result.count("device")) {
+        config.cameraDeviceID = result["device"].as<int>();
+    }
+    if (result.count("width")) {
+        config.cameraWidth = result["width"].as<int>();
+    }
+    if (result.count("height")) {
+        config.cameraHeight = result["height"].as<int>();
+    }
+}
+
+int main(int argc, char* argv[]) {
+    AppConfig config;
+
+    load_config_from_file(config);
+
+    parse_arguments(argc, argv, config);
+
+    std::cout << "Starting with Camera " << config.cameraDeviceID 
+              << " at " << config.cameraWidth << "x" << config.cameraHeight << std::endl;
+
     // 1. Initialize Camera
-    Camera camera(0, 1920, 1080);
+    Camera camera(config.cameraDeviceID, config.cameraWidth, config.cameraHeight);
     if (!camera.isOpened()) {
         return -1;
     }
