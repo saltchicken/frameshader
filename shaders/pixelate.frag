@@ -22,5 +22,5 @@ void main()
     vec2 pixelatedTexCoord = snappedCoords / resolution;
 
     // All pixels within the same 8x8 cell will now sample from the same coordinate
-    FragColor = texture(ourTexture, pixelatedTexCoord);
+    FragColor = texture(videoTexture, pixelatedTexCoord);
 }
