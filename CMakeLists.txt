@@ -31,10 +31,11 @@ include_directories(
 
 # Add the executable with all its source files
 add_executable(${PROJECT_NAME} 
-    src/main.cpp 
+    src/main.cpp
     src/glad.c
     src/Shader.cpp
     src/Camera.cpp
+    src/Config.cpp
 )
 
 file(COPY shaders DESTINATION ${CMAKE_BINARY_DIR})
