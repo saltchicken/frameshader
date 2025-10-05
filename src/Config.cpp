@@ -21,9 +21,9 @@ static int config_handler(void* user, const char* section, const char* name,
             pconfig->cameraHeight = std::stoi(value);
         }
     }
-    else if (std::string(section) == "shader") {
+    else if (std::string(section) == "fragment_shader") {
       if (std::string(name) == "name") {
-              pconfig->shaderName = std::string(value);
+              pconfig->fragmentShaderName = std::string(value);
           }
       }
     return 1;
@@ -53,7 +53,7 @@ static void parse_from_args(int argc, char* argv[], AppConfig& config) {
             ("w,width", "Camera frame width", cxxopts::value<int>())
             ("h,height", "Camera frame height", cxxopts::value<int>())
             // TODO: Add all shader options
-            ("s,shader", "Shader name (pixelate, wave, ascii", cxxopts::value<std::string>())
+            ("fs,fragment-shader", "Fragment shader name (pixelate, wave, ascii)", cxxopts::value<std::string>())
             ("help", "Print help");
 
         auto result = options.parse(argc, argv);
@@ -73,8 +73,8 @@ static void parse_from_args(int argc, char* argv[], AppConfig& config) {
         if (result.count("height")) {
             config.cameraHeight = result["height"].as<int>();
         }
-        if (result.count("shader")) {
-            config.shaderName = result["shader"].as<std::string>();
+        if (result.count("fragment_shader")) {
+            config.fragmentShaderName = result["fragmentShader"].as<std::string>();
         }
     } catch (const cxxopts::exceptions::exception& e) {
         std::cerr << "Error parsing options: " << e.what() << std::endl;

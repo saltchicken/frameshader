@@ -6,7 +6,7 @@ struct AppConfig {
   int cameraWidth = 1920;
   int cameraHeight = 1080;
 
-  std::string shaderName = "pixelate";
+  std::string fragmentShaderName = "pixelate";
 
 };
 

@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 4. Build and compile our shader program
-    std::string fragmentShaderPath = "shaders/" + config.shaderName + ".frag";
+    std::string fragmentShaderPath = "shaders/" + config.fragmentShaderName + ".frag";
     Shader ourShader("shaders/shader.vert", fragmentShaderPath.c_str());
 
     // 5. Vertex data for a screen-filling quad
@@ -122,7 +122,7 @@ int main(int argc, char* argv[]) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     GLuint fontTexture = 0;
-    if (config.shaderName == "ascii") { // Only load font texture if using the ASCII shader
+    if (config.fragmentShaderName == "ascii") { // Only load font texture if using the ASCII shader
       loadTexture("shaders/font.png", fontTexture, GL_TEXTURE1); // Load font into texture unit 1
     }
 
@@ -130,7 +130,7 @@ int main(int argc, char* argv[]) {
     cv::Mat frame;
     ourShader.use(); // Activate shader once before the loop
     ourShader.setInt("videoTexture", 0); // Tell shader videoTexture is on unit 0
-    if (config.shaderName == "ascii") {
+    if (config.fragmentShaderName == "ascii") {
       ourShader.setInt("fontAtlas", 1);    // Tell shader fontAtlas is on unit
     }
                                          //
@@ -149,11 +149,11 @@ int main(int argc, char* argv[]) {
         glClear(GL_COLOR_BUFFER_BIT);
 
         ourShader.use();
-        if (config.shaderName == "pixelate") {
+        if (config.fragmentShaderName == "pixelate") {
             ourShader.setVec2("resolution", (float)frame.cols, (float)frame.rows);
-        } else if (config.shaderName == "wavy") {
+        } else if (config.fragmentShaderName == "wavy") {
             ourShader.setFloat("time", (float)glfwGetTime());
-        } else if (config.shaderName == "ascii") {
+        } else if (config.fragmentShaderName == "ascii") {
             ourShader.setVec2("resolution", (float)frame.cols, (float)frame.rows);
             ourShader.setVec2("charSize", 8.0f, 16.0f);
         }
