@@ -1,68 +1,44 @@
 #include "Config.h"
 #include <iostream>
-#include <string>
 #include <cstdlib>
 #include <cstdint>
 #include <cxxopts.hpp>
 #include <ini.h>
 
-// The callback for the INI parser
-static int config_handler(void* user, const char* section, const char* name,
-                          const char* value) {
+// INI parser callback
+static int config_handler(void* user, const char* section, const char* name, const char* value) {
     AppConfig* pconfig = (AppConfig*)user;
 
-    // We only care about the [camera] section for now
     if (std::string(section) == "camera") {
-        if (std::string(name) == "device") {
-            pconfig->cameraDeviceID = std::stoi(value);
-        } else if (std::string(name) == "width") {
-            pconfig->cameraWidth = std::stoi(value);
-        } else if (std::string(name) == "height") {
-            pconfig->cameraHeight = std::stoi(value);
-        }
-    }
-    else if (std::string(section) == "fragment_shader") {
-      if (std::string(name) == "name") {
-              pconfig->fragmentShaderName = std::string(value);
-          }
-      }
+        if (std::string(name) == "device") pconfig->cameraDeviceID = std::stoi(value);
+        else if (std::string(name) == "width") pconfig->cameraWidth = std::stoi(value);
+        else if (std::string(name) == "height") pconfig->cameraHeight = std::stoi(value);
+    } 
     else if (std::string(section) == "ascii_shader") {
-        if (std::string(name) == "char_width") {
-            pconfig->asciiCharWidth = std::stof(value);
-        } else if (std::string(name) == "char_height") {
-            pconfig->asciiCharHeight = std::stof(value);
-        }
+        if (std::string(name) == "char_width") pconfig->asciiCharWidth = std::stof(value);
+        else if (std::string(name) == "char_height") pconfig->asciiCharHeight = std::stof(value);
     }
     return 1;
 }
 
-// Internal function to load settings from our config file
+// Load from INI file
 static void load_from_ini(AppConfig& config) {
     const char* homeDir = getenv("HOME");
-    if (!homeDir) {
-        std::cerr << "Could not get HOME directory." << std::endl;
-        return;
-    }
+    if (!homeDir) return;
     std::string configPath = std::string(homeDir) + "/.config/frame_shader/config.ini";
-
-    if (ini_parse(configPath.c_str(), config_handler, &config) < 0) {
-    // TODO: Make sure that the absence of a config file is not fatal
-        std::cout << "No config file found at " << configPath << ". Using defaults." << std::endl;
-    }
+    ini_parse(configPath.c_str(), config_handler, &config);
 }
 
-// Internal function to parse command line arguments and override config
+// Parse command-line arguments
 static void parse_from_args(int argc, char* argv[], AppConfig& config) {
     try {
-        cxxopts::Options options(argv[0], "A real-time camera shader application");
+        cxxopts::Options options(argv[0], "ASCII camera shader");
         options.add_options()
             ("d,device", "Camera device ID", cxxopts::value<int>())
             ("w,width", "Camera frame width", cxxopts::value<int>())
             ("h,height", "Camera frame height", cxxopts::value<int>())
-            // TODO: Add all shader options
-            ("fs,fragment-shader", "Fragment shader name (pixelate, wave, ascii)", cxxopts::value<std::string>())
-            ("cw,char-width", "ASCII character width", cxxopts::value<float>())
-            ("ch,char-height", "ASCII character height", cxxopts::value<float>())
+            ("cw,char-width", "ASCII shader character width", cxxopts::value<float>())
+            ("ch,char-height", "ASCII shader character height", cxxopts::value<float>())
             ("help", "Print help");
 
         auto result = options.parse(argc, argv);
@@ -72,36 +48,22 @@ static void parse_from_args(int argc, char* argv[], AppConfig& config) {
             exit(0);
         }
         
-        // Only update config if the argument was actually passed
-        if (result.count("device")) {
-            config.cameraDeviceID = result["device"].as<int>();
-        }
-        if (result.count("width")) {
-            config.cameraWidth = result["width"].as<int>();
-        }
-        if (result.count("height")) {
-            config.cameraHeight = result["height"].as<int>();
-        }
-        if (result.count("fragment-shader")) {
-            config.fragmentShaderName = result["fragment-shader"].as<std::string>();
-        }
-        if (result.count("char-width")) {
-            config.asciiCharWidth = result["char-width"].as<float>();
-        }
-        if (result.count("char-height")) {
-            config.asciiCharHeight = result["char-height"].as<float>();
-        }
+        if (result.count("device")) config.cameraDeviceID = result["device"].as<int>();
+        if (result.count("width")) config.cameraWidth = result["width"].as<int>();
+        if (result.count("height")) config.cameraHeight = result["height"].as<int>();
+        if (result.count("char-width")) config.asciiCharWidth = result["char-width"].as<float>();
+        if (result.count("char-height")) config.asciiCharHeight = result["char-height"].as<float>();
+
     } catch (const cxxopts::exceptions::exception& e) {
         std::cerr << "Error parsing options: " << e.what() << std::endl;
         exit(1);
     }
 }
 
-// --- Public Interface ---
-
+// Public interface
 AppConfig load_configuration(int argc, char* argv[]) {
-    AppConfig config; // Start with default values from the struct definition
-    load_from_ini(config); // Override with values from config.ini
-    parse_from_args(argc, argv, config); // Finally, override with command line arguments
+    AppConfig config; // Start with default values
+    load_from_ini(config); // Override with INI file
+    parse_from_args(argc, argv, config); // Override with command-line args
     return config;
 }
