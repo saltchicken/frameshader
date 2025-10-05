@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.11)
 project(frameshader)
 
-cmake_policy(SET CMP0072 NEW)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Find necessary packages
+# --- Dependencies ---
 include(FetchContent)
 FetchContent_Declare(
   cxxopts
@@ -24,12 +24,11 @@ find_package(OpenCV REQUIRED COMPONENTS core highgui videoio imgproc imgcodecs)
 find_package(OpenGL REQUIRED)
 find_package(glfw3 3.3 REQUIRED)
 
-include_directories(
-  include
-  ${inih_SOURCE_DIR}
-)
+add_library(OpenCV_lib INTERFACE)
+target_include_directories(OpenCV_lib INTERFACE ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(OpenCV_lib INTERFACE ${OpenCV_LIBS})
 
-# Add the executable with all its source files
+
 add_executable(${PROJECT_NAME} 
     src/main.cpp
     src/glad.c
@@ -38,13 +37,17 @@ add_executable(${PROJECT_NAME}
     src/Config.cpp
 )
 
-file(COPY shaders DESTINATION ${CMAKE_BINARY_DIR})
+target_include_directories(${PROJECT_NAME} PRIVATE 
+    include
+    ${inih_SOURCE_DIR}
+)
 
-# Link all the required libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    ${OpenCV_LIBS}
-    ${OPENGL_LIBRARIES}
+    OpenCV_lib
+    OpenGL::GL
     glfw
     cxxopts::cxxopts
     inih
 )
+
+file(COPY shaders DESTINATION ${CMAKE_BINARY_DIR})
