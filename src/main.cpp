@@ -29,6 +29,9 @@ void loadTexture(const char* path, GLuint& textureID, GLenum textureUnit) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
+    // Tell OpenGL how to unpack the pixel data (byte-by-byte)
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
     // Load image using OpenCV
     cv::Mat image = cv::imread(path, cv::IMREAD_UNCHANGED);
     if (image.empty()) {
@@ -51,9 +54,6 @@ void loadTexture(const char* path, GLuint& textureID, GLenum textureUnit) {
 
 int main(int argc, char* argv[]) {
     AppConfig config = load_configuration(argc, argv);
-
-    std::cout << "Starting with Camera " << config.cameraDeviceID 
-              << " at " << config.cameraWidth << "x" << config.cameraHeight << std::endl;
 
     // 1. Initialize Camera
     Camera camera(config.cameraDeviceID, config.cameraWidth, config.cameraHeight);
@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
 
     // 5. Vertex data for a screen-filling quad
     float vertices[] = {
-        // positions          // texture coords (V flipped)
+        // positions          // texture coords
          1.0f,  1.0f, 0.0f,   1.0f, 0.0f, // top right
          1.0f, -1.0f, 0.0f,   1.0f, 1.0f, // bottom right
         -1.0f, -1.0f, 0.0f,   0.0f, 1.0f, // bottom left
@@ -111,58 +111,77 @@ int main(int argc, char* argv[]) {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    // 6. Create texture for the video frame and font texture
+    // 6. Create and allocate all textures before the loop
+    // --- Step 6.1: Handle the video texture first to avoid state conflicts ---
     GLuint videoTexture;
     glGenTextures(1, &videoTexture);
-    glActiveTexture(GL_TEXTURE0); // Activate texture unit 0
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, videoTexture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
+    cv::Mat frame;
+    if (!camera.read(frame)) {
+        std::cerr << "Failed to read initial camera frame." << std::endl;
+        return -1;
+    }
+    // Set alignment before uploading the first frame's data
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    // Allocate texture memory on GPU with the first frame
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frame.cols, frame.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, frame.data);
+
+    // --- Step 6.2: Now load any other textures needed ---
     GLuint fontTexture = 0;
-    if (config.fragmentShaderName == "ascii") { // Only load font texture if using the ASCII shader
-      loadTexture("shaders/font.png", fontTexture, GL_TEXTURE1); // Load font into texture unit 1
+    if (config.fragmentShaderName == "ascii") {
+        loadTexture("shaders/font.png", fontTexture, GL_TEXTURE1);
     }
 
-    // 7. The Render Loop
-    cv::Mat frame;
-    ourShader.use(); // Activate shader once before the loop
-    ourShader.setInt("videoTexture", 0); // Tell shader videoTexture is on unit 0
+    // 7. Final setup before the Render Loop
+    ourShader.use();
+    ourShader.setInt("videoTexture", 0);
     if (config.fragmentShaderName == "ascii") {
-      ourShader.setInt("fontAtlas", 1);    // Tell shader fontAtlas is on unit
+        ourShader.setInt("fontAtlas", 1);
     }
-                                         //
+    
+    // The Render Loop
     while (!glfwWindowShouldClose(window)) {
-        if (!camera.read(frame)) {
-            break;
-        }
-        
-        // Update texture data
+        // The first frame read before the loop will be processed here first
+
+        // Update the video texture with the current frame's data
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, videoTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frame.cols, frame.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, frame.data);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, frame.cols, frame.rows, GL_BGR, GL_UNSIGNED_BYTE, frame.data);
 
-        // Rendering
+        // Rendering commands
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
         ourShader.use();
-        if (config.fragmentShaderName == "pixelate") {
-            ourShader.setVec2("resolution", (float)frame.cols, (float)frame.rows);
-        } else if (config.fragmentShaderName == "wavy") {
+        // Set shader-specific uniforms that change each frame
+        if (config.fragmentShaderName == "wavy") {
             ourShader.setFloat("time", (float)glfwGetTime());
-        } else if (config.fragmentShaderName == "ascii") {
+        } else if (config.fragmentShaderName == "ascii" || config.fragmentShaderName == "pixelate") {
+            // These uniforms don't change, but setting them here is fine
             ourShader.setVec2("resolution", (float)frame.cols, (float)frame.rows);
-            ourShader.setVec2("charSize", 8.0f, 16.0f);
+            if(config.fragmentShaderName == "ascii") {
+                ourShader.setVec2("charSize", 8.0f, 16.0f);
+            }
         }
 
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
+        // Swap buffers and poll for events
         glfwSwapBuffers(window);
         glfwPollEvents();
+
+        // Read the NEXT frame at the end of the loop, ready for the next iteration
+        if (!camera.read(frame)) {
+            break;
+        }
     }
 
     // 8. Cleanup
@@ -171,7 +190,7 @@ int main(int argc, char* argv[]) {
     glDeleteBuffers(1, &EBO);
     glDeleteTextures(1, &videoTexture);
     if (fontTexture != 0) {
-      glDeleteTextures(1, &fontTexture);
+        glDeleteTextures(1, &fontTexture);
     }
     glfwTerminate();
     return 0;
