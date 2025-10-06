@@ -139,7 +139,7 @@ int main(int argc, char* argv[]) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     GLuint fontTexture;
-    loadTextureFromFile("shaders/font.png", fontTexture, GL_TEXTURE1);
+    loadTextureFromFile(selectedFont.path.c_str(), fontTexture, GL_TEXTURE1);
 
     // 8. Set initial shader uniforms
     asciiShader.use();
