@@ -5,22 +5,42 @@
 #include <cxxopts.hpp>
 #include <ini.h>
 
-// INI parser callback
 static int config_handler(void* user, const char* section, const char* name, const char* value) {
     AppConfig* pconfig = (AppConfig*)user;
-
-    if (std::string(section) == "camera") {
-        if (std::string(name) == "device") pconfig->cameraDeviceID = std::stoi(value);
-        else if (std::string(name) == "width") pconfig->cameraWidth = std::stoi(value);
-        else if (std::string(name) == "height") pconfig->cameraHeight = std::stoi(value);
-    } 
-    else if (std::string(section) == "ascii_shader") {
-        if (std::string(name) == "char_width") pconfig->asciiCharWidth = std::stof(value);
-        else if (std::string(name) == "char_height") pconfig->asciiCharHeight = std::stof(value);
-        else if (std::string(name) == "sensitivity") pconfig->asciiSensitivity = std::stof(value);
-        else if (std::string(name) == "num_chars") pconfig->asciiNumChars = std::stof(value);
+    
+    // Handle camera settings
+    if (strcmp(section, "camera") == 0) {
+        if (strcmp(name, "device") == 0) pconfig->cameraDeviceID = std::stoi(value);
+        else if (strcmp(name, "width") == 0) pconfig->cameraWidth = std::stoi(value);
+        else if (strcmp(name, "height") == 0) pconfig->cameraHeight = std::stoi(value);
+        return 1;
     }
-    return 1;
+    
+    // Handle general ascii_shader settings
+    if (strcmp(section, "ascii_shader") == 0) {
+        if (strcmp(name, "sensitivity") == 0) pconfig->asciiSensitivity = std::stof(value);
+        return 1;
+    }
+
+    // ## NEW LOGIC ##
+    // Handle dynamic font profile sections like [font:default]
+    const char* font_prefix = "font:";
+    if (strncmp(section, font_prefix, strlen(font_prefix)) == 0) {
+        // Extract the profile name (e.g., "default" from "font:default")
+        std::string profileName = section + strlen(font_prefix);
+        
+        // Get or create the FontProfile for this name
+        FontProfile& profile = pconfig->fontProfiles[profileName];
+
+        // Set the property on the profile
+        if (strcmp(name, "path") == 0) profile.path = value;
+        else if (strcmp(name, "char_width") == 0) profile.charWidth = std::stof(value);
+        else if (strcmp(name, "char_height") == 0) profile.charHeight = std::stof(value);
+        else if (strcmp(name, "num_chars") == 0) profile.numChars = std::stof(value);
+        return 1;
+    }
+
+    return 1; // Return 1 on success
 }
 
 // Load from INI file
@@ -39,10 +59,8 @@ static void parse_from_args(int argc, char* argv[], AppConfig& config) {
             ("d,device", "Camera device ID", cxxopts::value<int>())
             ("w,width", "Camera frame width", cxxopts::value<int>())
             ("h,height", "Camera frame height", cxxopts::value<int>())
-            ("cw,char-width", "ASCII shader character width", cxxopts::value<float>())
-            ("ch,char-height", "ASCII shader character height", cxxopts::value<float>())
             ("s,sensitivity", "ASCII shader brightness sensitivity", cxxopts::value<float>())
-            ("n,num-chars", "Number of characters in the font atlas", cxxopts::value<float>())
+            ("f,font", "Font profile", cxxopts::value<std::string>())
             ("help", "Print help");
 
         auto result = options.parse(argc, argv);
@@ -55,10 +73,8 @@ static void parse_from_args(int argc, char* argv[], AppConfig& config) {
         if (result.count("device")) config.cameraDeviceID = result["device"].as<int>();
         if (result.count("width")) config.cameraWidth = result["width"].as<int>();
         if (result.count("height")) config.cameraHeight = result["height"].as<int>();
-        if (result.count("char-width")) config.asciiCharWidth = result["char-width"].as<float>();
-        if (result.count("char-height")) config.asciiCharHeight = result["char-height"].as<float>();
         if (result.count("sensitivity")) config.asciiSensitivity = result["sensitivity"].as<float>();
-        if (result.count("num-chars")) config.asciiNumChars = result["num-chars"].as<float>();
+        if (result.count("font")) config.selectedFontProfile = result["font"].as<std::string>(); // ## MODIFIED ##
 
 
     } catch (const cxxopts::exceptions::exception& e) {

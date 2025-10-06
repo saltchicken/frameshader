@@ -55,6 +55,23 @@ int main(int argc, char* argv[]) {
     // 1. Load Configuration
     AppConfig config = load_configuration(argc, argv);
 
+    FontProfile selectedFont;
+    auto it = config.fontProfiles.find(config.selectedFontProfile);
+    if (it != config.fontProfiles.end()) {
+        selectedFont = it->second;
+    } else {
+        std::cerr << "ERROR: Font profile '" << config.selectedFontProfile << "' not found in config.ini." << std::endl;
+        // Attempt to fall back to a "default" profile if it exists
+        auto default_it = config.fontProfiles.find("default");
+        if (default_it != config.fontProfiles.end()) {
+            std::cerr << "Falling back to 'default' profile." << std::endl;
+            selectedFont = default_it->second;
+        } else {
+            std::cerr << "No 'default' profile found. Exiting." << std::endl;
+            return -1;
+        }
+    }
+
     // 2. Initialize Camera
     Camera camera(config.cameraDeviceID, config.cameraWidth, config.cameraHeight);
     if (!camera.isOpened()) {
@@ -129,9 +146,10 @@ int main(int argc, char* argv[]) {
     asciiShader.setInt("videoTexture", 0);
     asciiShader.setInt("fontAtlas", 1);
     asciiShader.setVec2("resolution", (float)camera.getWidth(), (float)camera.getHeight());
-    asciiShader.setVec2("charSize", config.asciiCharWidth, config.asciiCharHeight);
+    asciiShader.setVec2("charSize", selectedFont.charWidth, selectedFont.charHeight);
+    asciiShader.setFloat("numChars", selectedFont.numChars);
+
     asciiShader.setFloat("sensitivity", config.asciiSensitivity);
-    asciiShader.setFloat("numChars", config.asciiNumChars);
 
     // 9. Render Loop
     cv::Mat frame;
