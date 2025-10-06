@@ -104,7 +104,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 5. Build shader program
-    Shader asciiShader("shaders/shader.vert", "shaders/ascii_matrix.frag");
+    Shader asciiShader("shaders/shader.vert", "shaders/ascii_matrix_color.frag");
 
     // 6. Setup screen quad VAO
     // ## FIX for upside-down video: Flipped texture coordinates ##
