@@ -11,7 +11,7 @@ uniform vec2 charSize;          // Size of one character cell (e.g., 8x16 pixels
 
 uniform float sensitivity = 1.0; // <-- ADD THIS SENSITIVITY UNIFORM
 
-const float numChars = 10.0;
+uniform float numChars = 10.0;
 
 void main()
 {

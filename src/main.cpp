@@ -130,6 +130,8 @@ int main(int argc, char* argv[]) {
     asciiShader.setInt("fontAtlas", 1);
     asciiShader.setVec2("resolution", (float)camera.getWidth(), (float)camera.getHeight());
     asciiShader.setVec2("charSize", config.asciiCharWidth, config.asciiCharHeight);
+    asciiShader.setFloat("sensitivity", config.asciiSensitivity);
+    asciiShader.setFloat("numChars", config.asciiNumChars);
 
     // 9. Render Loop
     cv::Mat frame;

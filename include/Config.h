@@ -9,6 +9,8 @@ struct AppConfig {
   // ASCII Effect-specific settings
   float asciiCharWidth = 8.0f;
   float asciiCharHeight = 16.0f;
+  float asciiSensitivity = 1.0f;
+  float asciiNumChars = 10.0f;
 
 };
 

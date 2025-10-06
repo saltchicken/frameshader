@@ -17,6 +17,8 @@ static int config_handler(void* user, const char* section, const char* name, con
     else if (std::string(section) == "ascii_shader") {
         if (std::string(name) == "char_width") pconfig->asciiCharWidth = std::stof(value);
         else if (std::string(name) == "char_height") pconfig->asciiCharHeight = std::stof(value);
+        else if (std::string(name) == "sensitivity") pconfig->asciiSensitivity = std::stof(value);
+        else if (std::string(name) == "num_chars") pconfig->asciiNumChars = std::stof(value);
     }
     return 1;
 }
@@ -39,6 +41,8 @@ static void parse_from_args(int argc, char* argv[], AppConfig& config) {
             ("h,height", "Camera frame height", cxxopts::value<int>())
             ("cw,char-width", "ASCII shader character width", cxxopts::value<float>())
             ("ch,char-height", "ASCII shader character height", cxxopts::value<float>())
+            ("s,sensitivity", "ASCII shader brightness sensitivity", cxxopts::value<float>())
+            ("n,num-chars", "Number of characters in the font atlas", cxxopts::value<float>())
             ("help", "Print help");
 
         auto result = options.parse(argc, argv);
@@ -53,6 +57,9 @@ static void parse_from_args(int argc, char* argv[], AppConfig& config) {
         if (result.count("height")) config.cameraHeight = result["height"].as<int>();
         if (result.count("char-width")) config.asciiCharWidth = result["char-width"].as<float>();
         if (result.count("char-height")) config.asciiCharHeight = result["char-height"].as<float>();
+        if (result.count("sensitivity")) config.asciiSensitivity = result["sensitivity"].as<float>();
+        if (result.count("num-chars")) config.asciiNumChars = result["num-chars"].as<float>();
+
 
     } catch (const cxxopts::exceptions::exception& e) {
         std::cerr << "Error parsing options: " << e.what() << std::endl;
