@@ -158,7 +158,7 @@ int main(int argc, char* argv[]) {
 
     // 9. Set initial shader uniforms
     asciiShader.use();
-    // asciiShader.setInt("videoTexture", 0);
+    asciiShader.setInt("videoTexture", 0);
     asciiShader.setInt("fontAtlas", 1);
     asciiShader.setInt("maskTexture", 2);
     asciiShader.setVec2("resolution", (float)camera.getWidth(), (float)camera.getHeight());
