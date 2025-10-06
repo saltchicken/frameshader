@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) {
     // 3. Load the segmentation model
     cv::dnn::Net segNet;
     try {
-        segNet = cv::dnn::readNet("models/model.onnx");
+        segNet = cv::dnn::readNet("models/selfie_segmentation.onnx");
         std::cout << "Successfully loaded ONNX person segmentation model." << std::endl;
     } catch (const cv::Exception& e) {
         std::cerr << "ERROR: Could not load the segmentation model: " << e.what() << std::endl;
