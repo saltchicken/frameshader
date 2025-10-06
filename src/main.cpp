@@ -158,13 +158,13 @@ int main(int argc, char* argv[]) {
 
     // 9. Set initial shader uniforms
     asciiShader.use();
-    asciiShader.setInt("videoTexture", 0);
+    // asciiShader.setInt("videoTexture", 0);
     asciiShader.setInt("fontAtlas", 1);
     asciiShader.setInt("maskTexture", 2);
     asciiShader.setVec2("resolution", (float)camera.getWidth(), (float)camera.getHeight());
     asciiShader.setVec2("charSize", selectedFont.charWidth, selectedFont.charHeight);
     asciiShader.setFloat("numChars", selectedFont.numChars);
-    asciiShader.setFloat("sensitivity", config.asciiSensitivity);
+    // asciiShader.setFloat("sensitivity", config.asciiSensitivity);
 
     // 10. Render Loop
     cv::Mat frame;
@@ -200,6 +200,9 @@ int main(int argc, char* argv[]) {
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         asciiShader.use();
+
+        asciiShader.setFloat("time", (float)glfwGetTime());
+    
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
