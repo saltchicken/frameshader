@@ -28,7 +28,13 @@ add_library(OpenCV_lib INTERFACE)
 target_include_directories(OpenCV_lib INTERFACE ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(OpenCV_lib INTERFACE ${OpenCV_LIBS})
 
-file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.c")
+set(SOURCES
+    src/main.cpp
+    src/glad.c
+    src/Shader.cpp
+    src/Config.cpp
+    src/Camera.cpp
+)
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 
@@ -46,3 +52,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 file(COPY shaders DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY font_atlases DESTINATION ${CMAKE_BINARY_DIR})
+
