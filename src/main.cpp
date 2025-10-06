@@ -104,7 +104,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 5. Build shader program
-    Shader asciiShader("shaders/shader.vert", "shaders/ascii.frag");
+    Shader asciiShader("shaders/shader.vert", "shaders/ascii_matrix.frag");
 
     // 6. Setup screen quad VAO
     // ## FIX for upside-down video: Flipped texture coordinates ##
@@ -173,6 +173,8 @@ int main(int argc, char* argv[]) {
         glClear(GL_COLOR_BUFFER_BIT);
         
         asciiShader.use();
+        asciiShader.setFloat("time", (float)glfwGetTime());
+
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
