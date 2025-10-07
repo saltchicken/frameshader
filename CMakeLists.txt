@@ -30,6 +30,7 @@ target_link_libraries(OpenCV_lib INTERFACE ${OpenCV_LIBS})
 
 set(SOURCES
     src/main.cpp
+    src/Application.cpp
     src/glad.c
     src/Shader.cpp
     src/Config.cpp
