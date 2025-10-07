@@ -163,15 +163,15 @@ bool Application::initGLAD() {
 void Application::initShader() {
     // Define the paths to your fragment shaders
     fragmentShaderPaths = {
-        "shaders/ascii.frag",
-        "shaders/ascii_matrix.frag",
-        "shaders/ascii_matrix_color.frag"
+        "shaders/frag/ascii.frag",
+        "shaders/frag/ascii_matrix.frag",
+        "shaders/frag/ascii_matrix_color.frag"
     };
 
     shaders.clear(); // Clear any previous shaders
     for (const auto& path : fragmentShaderPaths) {
         try {
-            shaders.push_back(std::make_unique<Shader>("shaders/shader.vert", path.c_str()));
+            shaders.push_back(std::make_unique<Shader>("shaders/vert/shader.vert", path.c_str()));
             std::cout << "Loaded shader: " << path << std::endl;
         } catch (const std::exception& e) {
             std::cerr << "Failed to load shader " << path << ": " << e.what() << std::endl;
