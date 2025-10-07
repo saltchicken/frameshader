@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug frameshader",
+      "type": "codelldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/frameshader",
+      "cwd": "${workspaceFolder}/build",
+      "args": [],
+      "stopOnEntry": false
+    }
+  ]
+}
