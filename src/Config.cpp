@@ -16,12 +16,6 @@ static int config_handler(void* user, const char* section, const char* name, con
         return 1;
     }
     
-    // Handle general ascii_shader settings
-    if (strcmp(section, "ascii_shader") == 0) {
-        if (strcmp(name, "sensitivity") == 0) pconfig->asciiSensitivity = std::stof(value);
-        return 1;
-    }
-
     // ## NEW LOGIC ##
     // Handle dynamic font profile sections like [font:default]
     const char* font_prefix = "font:";
@@ -37,6 +31,19 @@ static int config_handler(void* user, const char* section, const char* name, con
         else if (strcmp(name, "char_width") == 0) profile.charWidth = std::stof(value);
         else if (strcmp(name, "char_height") == 0) profile.charHeight = std::stof(value);
         else if (strcmp(name, "num_chars") == 0) profile.numChars = std::stof(value);
+        return 1;
+    }
+
+    const char* shader_prefix = "shader:";
+    if (strncmp(section, shader_prefix, strlen(shader_prefix)) == 0) {
+        std::string shaderName = section + strlen(shader_prefix);
+        
+        // Get the map for this shader
+        ShaderConfig& shaderConf = pconfig->shaderConfigs[shaderName];
+
+        // SIMPLIFIED: Store any key-value pair directly into the map
+        shaderConf[name] = std::stof(value);
+        
         return 1;
     }
 
@@ -59,7 +66,6 @@ static void parse_from_args(int argc, char* argv[], AppConfig& config) {
             ("d,device", "Camera device ID", cxxopts::value<int>())
             ("w,width", "Camera frame width", cxxopts::value<int>())
             ("h,height", "Camera frame height", cxxopts::value<int>())
-            ("s,sensitivity", "ASCII shader brightness sensitivity", cxxopts::value<float>())
             ("f,font", "Font profile", cxxopts::value<std::string>())
             ("help", "Print help");
 
@@ -73,7 +79,6 @@ static void parse_from_args(int argc, char* argv[], AppConfig& config) {
         if (result.count("device")) config.cameraDeviceID = result["device"].as<int>();
         if (result.count("width")) config.cameraWidth = result["width"].as<int>();
         if (result.count("height")) config.cameraHeight = result["height"].as<int>();
-        if (result.count("sensitivity")) config.asciiSensitivity = result["sensitivity"].as<float>();
         if (result.count("font")) config.selectedFontProfile = result["font"].as<std::string>(); // ## MODIFIED ##
 
 

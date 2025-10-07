@@ -169,10 +169,19 @@ void Application::initShader() {
     };
 
     shaders.clear(); // Clear any previous shaders
+    shaderNames.clear();
     for (const auto& path : fragmentShaderPaths) {
         try {
             shaders.push_back(std::make_unique<Shader>("shaders/vert/shader.vert", path.c_str()));
             std::cout << "Loaded shader: " << path << std::endl;
+
+            std::string pathStr = path;
+            size_t last_slash = pathStr.find_last_of("/\\");
+            last_slash = (last_slash == std::string::npos) ? 0 : last_slash + 1;
+            size_t last_dot = pathStr.find_last_of('.');
+            std::string shortName = pathStr.substr(last_slash, last_dot - last_slash);
+            shaderNames.push_back(shortName);
+
         } catch (const std::exception& e) {
             std::cerr << "Failed to load shader " << path << ": " << e.what() << std::endl;
         }
@@ -225,18 +234,33 @@ void Application::key_callback(GLFWwindow* window, int key, int scancode, int ac
 }
 
 
-// NEW: Helper function to set common uniforms on the active shader
 void Application::updateActiveShaderUniforms() {
-    if (shaders.empty()) return;
+    if (shaders.empty() || shaderNames.empty()) return;
 
     Shader* currentShader = shaders[currentShaderIndex].get();
+    const std::string& currentShaderName = shaderNames[currentShaderIndex];
+
     currentShader->use();
+
+    // Set common uniforms for all shaders
     currentShader->setInt("videoTexture", 0);
     currentShader->setInt("fontAtlas", 1);
     currentShader->setVec2("resolution", (float)camera->getWidth(), (float)camera->getHeight());
     currentShader->setVec2("charSize", selectedFont.charWidth, selectedFont.charHeight);
     currentShader->setFloat("numChars", selectedFont.numChars);
-    currentShader->setFloat("sensitivity", config.asciiSensitivity);
+
+    // Find the specific configuration for the current shader
+    auto it = config.shaderConfigs.find(currentShaderName);
+    if (it != config.shaderConfigs.end()) {
+        const ShaderConfig& shaderConf = it->second;
+
+        // NEW: Loop through all parameters in the config map and set them as uniforms
+        for (const auto& pair : shaderConf) {
+            const std::string& uniformName = pair.first;
+            float uniformValue = pair.second;
+            currentShader->setFloat(uniformName, uniformValue);
+        }
+    }
 }
 
 void Application::handleKey(int key, int action) {

@@ -31,6 +31,7 @@ private:
     void updateActiveShaderUniforms(); // <-- Add new helper function
     std::vector<std::unique_ptr<Shader>> shaders; // <-- Store multiple shaders
     std::vector<std::string> fragmentShaderPaths; // <-- Store paths for feedback
+    std::vector<std::string> shaderNames;
     size_t currentShaderIndex = 0; // <-- Track the current shader
 
     // Input handling
