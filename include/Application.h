@@ -1,21 +1,17 @@
 #pragma once
 
+#include "Shader.h"
+#include "Camera.h"
+#include "Config.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <memory>
-#include "Config.h"
-#include "Camera.h"
-#include "Shader.h"
+#include <vector> // <-- Add this include
 
 class Application {
 public:
     Application(int argc, char* argv[]);
     ~Application();
-    
-    // Disallow copying and assignment
-    Application(const Application&) = delete;
-    Application& operator=(const Application&) = delete;
-
     int run();
 
 private:
@@ -23,7 +19,6 @@ private:
     void mainLoop();
     void cleanup();
 
-    // Initialization helpers
     bool loadConfig(int argc, char* argv[]);
     bool initCamera();
     bool initWindow();
@@ -32,20 +27,24 @@ private:
     void initGeometry();
     void initTextures();
 
-    // GLFW static callbacks that delegate to member functions
-    static void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-    static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
-    
-    // Member function to handle input
-    void handleKey(int key, int action);
+    // Shader management
+    void updateActiveShaderUniforms(); // <-- Add new helper function
+    std::vector<std::unique_ptr<Shader>> shaders; // <-- Store multiple shaders
+    std::vector<std::string> fragmentShaderPaths; // <-- Store paths for feedback
+    size_t currentShaderIndex = 0; // <-- Track the current shader
 
-    // Member Variables
+    // Input handling
+    void handleKey(int key, int action);
+    static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+    static void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+
+    // Member variables
+    GLFWwindow* window = nullptr;
     AppConfig config;
     FontProfile selectedFont;
-    GLFWwindow* window = nullptr;
     std::unique_ptr<Camera> camera;
-    std::unique_ptr<Shader> asciiShader;
     
+    // OpenGL handles
     GLuint VAO = 0, VBO = 0, EBO = 0;
     GLuint videoTexture = 0, fontTexture = 0;
 };

@@ -60,19 +60,15 @@ void Application::init() {
     if (!initCamera()) throw std::runtime_error("Camera initialization failed");
     if (!initWindow()) throw std::runtime_error("Window initialization failed");
     if (!initGLAD()) throw std::runtime_error("GLAD initialization failed");
-
+    
     initShader();
     initGeometry();
     initTextures();
 
-    // Set initial shader uniforms
-    asciiShader->use();
-    asciiShader->setInt("videoTexture", 0);
-    asciiShader->setInt("fontAtlas", 1);
-    asciiShader->setVec2("resolution", (float)camera->getWidth(), (float)camera->getHeight());
-    asciiShader->setVec2("charSize", selectedFont.charWidth, selectedFont.charHeight);
-    asciiShader->setFloat("numChars", selectedFont.numChars);
-    asciiShader->setFloat("sensitivity", config.asciiSensitivity);
+    // Set initial uniforms for the first shader
+    if (!shaders.empty()) {
+        updateActiveShaderUniforms();
+    }
 }
 
 void Application::mainLoop() {
@@ -81,23 +77,22 @@ void Application::mainLoop() {
         throw std::runtime_error("Could not read the first frame from the camera.");
     }
 
-    // Initial texture upload
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, videoTexture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frame.cols, frame.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, frame.data);
 
     while (!glfwWindowShouldClose(window)) {
-        // Update camera frame texture with the current frame
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, videoTexture);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, frame.cols, frame.rows, GL_BGR, GL_UNSIGNED_BYTE, frame.data);
 
-        // Rendering commands
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         
-        asciiShader->use();
-        asciiShader->setFloat("time", (float)glfwGetTime());
+        // Use the currently selected shader
+        Shader* currentShader = shaders[currentShaderIndex].get();
+        currentShader->use();
+        currentShader->setFloat("time", (float)glfwGetTime());
         
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -105,9 +100,8 @@ void Application::mainLoop() {
         glfwSwapBuffers(window);
         glfwPollEvents();
         
-        // Read the next frame for the next iteration
         if (!camera->read(frame)) {
-            break; 
+            break;  
         }
     }
 }
@@ -118,13 +112,11 @@ void Application::cleanup() {
     glDeleteBuffers(1, &EBO);
     glDeleteTextures(1, &videoTexture);
     glDeleteTextures(1, &fontTexture);
-
     if (window) {
         glfwDestroyWindow(window);
     }
     glfwTerminate();
 }
-
 bool Application::loadConfig(int argc, char* argv[]) {
     config = load_configuration(argc, argv);
     auto it = config.fontProfiles.find(config.selectedFontProfile);
@@ -143,12 +135,10 @@ bool Application::loadConfig(int argc, char* argv[]) {
     }
     return true;
 }
-
 bool Application::initCamera() {
     camera = std::make_unique<Camera>(config.cameraDeviceID, config.cameraWidth, config.cameraHeight);
     return camera->isOpened();
 }
-
 bool Application::initWindow() {
     if (!glfwInit()) return false;
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -160,20 +150,37 @@ bool Application::initWindow() {
         glfwTerminate();
         return false;
     }
-
     glfwMakeContextCurrent(window);
     glfwSetWindowUserPointer(window, this); // Store 'this' to retrieve in callbacks
     glfwSetKeyCallback(window, key_callback);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     return true;
 }
-
 bool Application::initGLAD() {
     return gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
 }
 
 void Application::initShader() {
-    asciiShader = std::make_unique<Shader>("shaders/shader.vert", "shaders/ascii_matrix_color.frag");
+    // Define the paths to your fragment shaders
+    fragmentShaderPaths = {
+        "shaders/ascii.frag",
+        "shaders/ascii_matrix.frag",
+        "shaders/ascii_matrix_color.frag"
+    };
+
+    shaders.clear(); // Clear any previous shaders
+    for (const auto& path : fragmentShaderPaths) {
+        try {
+            shaders.push_back(std::make_unique<Shader>("shaders/shader.vert", path.c_str()));
+            std::cout << "Loaded shader: " << path << std::endl;
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to load shader " << path << ": " << e.what() << std::endl;
+        }
+    }
+
+    if (shaders.empty()) {
+        throw std::runtime_error("No shaders could be loaded. Exiting.");
+    }
 }
 
 void Application::initGeometry() {
@@ -185,7 +192,6 @@ void Application::initGeometry() {
         -1.0f,  1.0f, 0.0f,   0.0f, 0.0f
     };
     unsigned int indices[] = { 0, 1, 3, 1, 2, 3 };
-
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
     glGenBuffers(1, &EBO);
@@ -199,7 +205,6 @@ void Application::initGeometry() {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 }
-
 void Application::initTextures() {
     glGenTextures(1, &videoTexture);
     glActiveTexture(GL_TEXTURE0);
@@ -212,7 +217,6 @@ void Application::initTextures() {
 void Application::framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
 }
-
 void Application::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
     Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
     if (app) {
@@ -220,8 +224,39 @@ void Application::key_callback(GLFWwindow* window, int key, int scancode, int ac
     }
 }
 
+
+// NEW: Helper function to set common uniforms on the active shader
+void Application::updateActiveShaderUniforms() {
+    if (shaders.empty()) return;
+
+    Shader* currentShader = shaders[currentShaderIndex].get();
+    currentShader->use();
+    currentShader->setInt("videoTexture", 0);
+    currentShader->setInt("fontAtlas", 1);
+    currentShader->setVec2("resolution", (float)camera->getWidth(), (float)camera->getHeight());
+    currentShader->setVec2("charSize", selectedFont.charWidth, selectedFont.charHeight);
+    currentShader->setFloat("numChars", selectedFont.numChars);
+    currentShader->setFloat("sensitivity", config.asciiSensitivity);
+}
+
 void Application::handleKey(int key, int action) {
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-        glfwSetWindowShouldClose(window, true);
+    if (action == GLFW_PRESS) {
+        if (key == GLFW_KEY_ESCAPE) {
+            glfwSetWindowShouldClose(window, true);
+        }
+        
+        if (key == GLFW_KEY_RIGHT) {
+            // Cycle to the next shader, wrapping around
+            currentShaderIndex = (currentShaderIndex + 1) % shaders.size();
+            updateActiveShaderUniforms();
+            std::cout << "Switched to shader: " << fragmentShaderPaths[currentShaderIndex] << std::endl;
+        }
+
+        if (key == GLFW_KEY_LEFT) {
+            // Cycle to the previous shader, wrapping around
+            currentShaderIndex = (currentShaderIndex + shaders.size() - 1) % shaders.size();
+            updateActiveShaderUniforms();
+            std::cout << "Switched to shader: " << fragmentShaderPaths[currentShaderIndex] << std::endl;
+        }
     }
 }
