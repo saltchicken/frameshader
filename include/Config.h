@@ -20,7 +20,8 @@ struct AppConfig {
     int cameraHeight = 720;
 
     // The name of the font profile to load initially
-    std::string selectedFontProfile = "dejavu_sans_mono_20";
+    // TODO: Make this dynamic or just pick from the first available
+    std::string selectedFontProfile = "dejavu_sans_mono-20-8x16";
 
     // Maps to hold overrides from the .ini file
     std::map<std::string, ShaderConfig> shaderConfigs;
