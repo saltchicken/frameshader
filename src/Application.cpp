@@ -194,30 +194,61 @@ void Application::initShader() {
 
 void Application::initFonts() {
     const std::string fontDir = "font_atlases";
+    availableFonts.clear(); // Clear any pre-existing font data
+
     try {
         for (const auto& entry : std::filesystem::directory_iterator(fontDir)) {
-            if (entry.is_regular_file() && entry.path().extension() == ".png") {
-                std::string profileName = entry.path().stem().string();
-                availableFonts[profileName].path = entry.path().string();
+            if (!entry.is_regular_file() || entry.path().extension() != ".png") {
+                continue;
             }
+
+            std::string profileName = entry.path().stem().string();
+            FontProfile profile; // Create a new profile with default-constructed values
+            profile.path = entry.path().string();
+
+            // 1. Attempt to parse default values from the filename
+            // TODO: Make this a function for readability
+            std::string stem = profileName;
+            size_t last_dash = stem.find_last_of('-');
+            if (last_dash != std::string::npos) {
+                std::string dimensions_part = stem.substr(last_dash + 1);
+                stem = stem.substr(0, last_dash);
+
+                size_t x_pos = dimensions_part.find('x');
+                if (x_pos != std::string::npos && x_pos > 0 && x_pos < dimensions_part.length() - 1) {
+                    try {
+                        profile.charWidth = std::stof(dimensions_part.substr(0, x_pos));
+                        profile.charHeight = std::stof(dimensions_part.substr(x_pos + 1));
+
+                        size_t second_last_dash = stem.find_last_of('-');
+                        if (second_last_dash != std::string::npos) {
+                            std::string numchars_part = stem.substr(second_last_dash + 1);
+                            profile.numChars = std::stof(numchars_part);
+                        }
+                    } catch (const std::exception& e) {
+                        std::cerr << "Warning: Could not parse metrics from filename '" << profileName << "'. Using defaults or config." << std::endl;
+                    }
+                }
+            }
+
+            // 2. Check for overrides from the configuration file
+            auto it = config.fontConfigs.find(profileName);
+            if (it != config.fontConfigs.end()) {
+                const FontConfig& fontConf = it->second;
+                if (fontConf.count("char_width")) profile.charWidth = fontConf.at("char_width");
+                if (fontConf.count("char_height")) profile.charHeight = fontConf.at("char_height");
+                if (fontConf.count("num_chars")) profile.numChars = fontConf.at("num_chars");
+            }
+            
+            // 3. Add the fully configured profile to the map
+            availableFonts[profileName] = profile;
         }
     } catch (const std::filesystem::filesystem_error& e) {
         throw std::runtime_error("Could not read from font atlas directory: " + fontDir);
     }
 
-    for (auto& pair : availableFonts) {
-        const std::string& profileName = pair.first;
-        FontProfile& profile = pair.second;
-
-        auto it = config.fontConfigs.find(profileName);
-        if (it != config.fontConfigs.end()) {
-            const FontConfig& fontConf = it->second;
-            if (fontConf.count("char_width")) profile.charWidth = fontConf.at("char_width");
-            if (fontConf.count("char_height")) profile.charHeight = fontConf.at("char_height");
-            if (fontConf.count("num_chars")) profile.numChars = fontConf.at("num_chars");
-        }
-    }
-
+    // This part remains the same: sort names and find the selected font
+    sortedFontNames.clear();
     for (const auto& pair : availableFonts) {
         sortedFontNames.push_back(pair.first);
     }
