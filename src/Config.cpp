@@ -20,17 +20,10 @@ static int config_handler(void* user, const char* section, const char* name, con
     // Handle dynamic font profile sections like [font:default]
     const char* font_prefix = "font:";
     if (strncmp(section, font_prefix, strlen(font_prefix)) == 0) {
-        // Extract the profile name (e.g., "default" from "font:default")
         std::string profileName = section + strlen(font_prefix);
-        
-        // Get or create the FontProfile for this name
-        FontProfile& profile = pconfig->fontProfiles[profileName];
-
-        // Set the property on the profile
-        if (strcmp(name, "path") == 0) profile.path = value;
-        else if (strcmp(name, "char_width") == 0) profile.charWidth = std::stof(value);
-        else if (strcmp(name, "char_height") == 0) profile.charHeight = std::stof(value);
-        else if (strcmp(name, "num_chars") == 0) profile.numChars = std::stof(value);
+        FontConfig& fontConf = pconfig->fontConfigs[profileName];
+        // Store any key-value pair from the .ini, e.g., "char_width" = 8.0
+        fontConf[name] = std::stof(value);
         return 1;
     }
 

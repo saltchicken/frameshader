@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <map>
 
 class Application {
 public:
@@ -25,6 +26,7 @@ private:
     bool initWindow();
     bool initGLAD();
     void initShader();
+    void initFonts(); // <-- NEW
     void initGeometry();
     void initTextures();
 
@@ -37,7 +39,8 @@ private:
 
     // Helpers
     void updateActiveShaderUniforms();
-    void reloadFontTexture(); // <-- ADD THIS FUNCTION DECLARATION
+    void reloadFontTexture();
+    const FontProfile& getCurrentFontProfile() const; // <-- NEW HELPER
 
     // Member Variables
     GLFWwindow* window = nullptr;
@@ -52,9 +55,9 @@ private:
 
     // Config Management
     AppConfig config;
-    FontProfile selectedFont;
 
-    // --- NEW FONT PROFILE MANAGEMENT ---
-    std::vector<std::string> fontProfileNames;
-    size_t currentFontProfileIndex = 0;
+    // --- NEW: Font Profile Management ---
+    std::map<std::string, FontProfile> availableFonts;
+    std::vector<std::string> sortedFontNames;
+    size_t currentFontIndex = 0;
 };

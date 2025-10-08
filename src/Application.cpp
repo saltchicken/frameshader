@@ -3,12 +3,12 @@
 #include <stdexcept>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
-#include <algorithm> // <-- Add for std::sort and std::find
-#include <iterator>  // <-- Add for std::distance
+#include <algorithm>
+#include <iterator>
 #include <filesystem>
 
 namespace {
-// Helper function for loading textures, moved from main.cpp
+// Helper function for loading textures
 void loadTextureFromFile(const char* path, GLuint& textureID, GLenum textureUnit) {
     glGenTextures(1, &textureID);
     glActiveTexture(textureUnit);
@@ -65,9 +65,10 @@ void Application::init() {
     if (!initGLAD()) throw std::runtime_error("GLAD initialization failed");
     
     initShader();
+    initFonts();
     initGeometry();
     initTextures();
-    // Set initial uniforms for the first shader
+
     if (!shaders.empty()) {
         updateActiveShaderUniforms();
     }
@@ -89,7 +90,6 @@ void Application::mainLoop() {
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         
-        // Use the currently selected shader
         Shader* currentShader = shaders[currentShaderIndex].get();
         currentShader->use();
         currentShader->setFloat("time", (float)glfwGetTime());
@@ -121,37 +121,6 @@ void Application::cleanup() {
 
 bool Application::loadConfig(int argc, char* argv[]) {
     config = load_configuration(argc, argv);
-    auto it = config.fontProfiles.find(config.selectedFontProfile);
-    if (it != config.fontProfiles.end()) {
-        selectedFont = it->second;
-    } else {
-        std::cerr << "ERROR: Font profile '" << config.selectedFontProfile << "' not found." << std::endl;
-        auto default_it = config.fontProfiles.find("default");
-        if (default_it != config.fontProfiles.end()) {
-            std::cerr << "Falling back to 'default' profile." << std::endl;
-            selectedFont = default_it->second;
-            config.selectedFontProfile = "default"; // Update the name as well
-        } else {
-            std::cerr << "No 'default' profile found. Exiting." << std::endl;
-            return false;
-        }
-    }
-
-    // --- NEW: Populate and sort font profile names ---
-    fontProfileNames.clear();
-    for (const auto& pair : config.fontProfiles) {
-        fontProfileNames.push_back(pair.first);
-    }
-    std::sort(fontProfileNames.begin(), fontProfileNames.end());
-
-    // --- NEW: Find the index of the initially selected profile ---
-    auto find_it = std::find(fontProfileNames.begin(), fontProfileNames.end(), config.selectedFontProfile);
-    if (find_it != fontProfileNames.end()) {
-        currentFontProfileIndex = std::distance(fontProfileNames.begin(), find_it);
-    } else {
-        currentFontProfileIndex = 0; // Should not happen due to fallback logic above
-    }
-
     return true;
 }
 
@@ -172,7 +141,7 @@ bool Application::initWindow() {
         return false;
     }
     glfwMakeContextCurrent(window);
-    glfwSetWindowUserPointer(window, this); // Store 'this' to retrieve in callbacks
+    glfwSetWindowUserPointer(window, this);
     glfwSetKeyCallback(window, key_callback);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     return true;
@@ -183,32 +152,29 @@ bool Application::initGLAD() {
 }
 
 void Application::initShader() {
- std::vector<std::string> fragmentShaderPaths; // Now a local variable
+    std::vector<std::string> fragmentShaderPaths;
     const std::string shaderDir = "shaders/frag";
 
     try {
-        // Iterate through the directory
         for (const auto& entry : std::filesystem::directory_iterator(shaderDir)) {
-            // Check if it's a regular file with the .frag extension
             if (entry.is_regular_file() && entry.path().extension() == ".frag") {
                 fragmentShaderPaths.push_back(entry.path().string());
             }
         }
     } catch (const std::filesystem::filesystem_error& e) {
-        std::cerr << "Filesystem error while scanning for shaders: " << e.what() << std::endl;
         throw std::runtime_error("Could not read from shader directory: " + shaderDir);
     }
 
-    // Sort the paths alphabetically for a consistent loading order
     std::sort(fragmentShaderPaths.begin(), fragmentShaderPaths.end());
 
-    shaders.clear(); // Clear any previous shaders
+    shaders.clear();
     shaderNames.clear();
+
     for (const auto& path : fragmentShaderPaths) {
         try {
             shaders.push_back(std::make_unique<Shader>("shaders/vert/shader.vert", path.c_str()));
             std::cout << "Loaded shader: " << path << std::endl;
-
+            
             std::string pathStr = path;
             size_t last_slash = pathStr.find_last_of("/\\");
             last_slash = (last_slash == std::string::npos) ? 0 : last_slash + 1;
@@ -226,9 +192,50 @@ void Application::initShader() {
     }
 }
 
+void Application::initFonts() {
+    const std::string fontDir = "font_atlases";
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(fontDir)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".png") {
+                std::string profileName = entry.path().stem().string();
+                availableFonts[profileName].path = entry.path().string();
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        throw std::runtime_error("Could not read from font atlas directory: " + fontDir);
+    }
+
+    for (auto& pair : availableFonts) {
+        const std::string& profileName = pair.first;
+        FontProfile& profile = pair.second;
+
+        auto it = config.fontConfigs.find(profileName);
+        if (it != config.fontConfigs.end()) {
+            const FontConfig& fontConf = it->second;
+            if (fontConf.count("char_width")) profile.charWidth = fontConf.at("char_width");
+            if (fontConf.count("char_height")) profile.charHeight = fontConf.at("char_height");
+            if (fontConf.count("num_chars")) profile.numChars = fontConf.at("num_chars");
+        }
+    }
+
+    for (const auto& pair : availableFonts) {
+        sortedFontNames.push_back(pair.first);
+    }
+    std::sort(sortedFontNames.begin(), sortedFontNames.end());
+
+    auto find_it = std::find(sortedFontNames.begin(), sortedFontNames.end(), config.selectedFontProfile);
+    if (find_it != sortedFontNames.end()) {
+        currentFontIndex = std::distance(sortedFontNames.begin(), find_it);
+    } else if (!sortedFontNames.empty()){
+        std::cerr << "Warning: Selected font '" << config.selectedFontProfile << "' not found. Falling back to first available font." << std::endl;
+        currentFontIndex = 0;
+    } else {
+        throw std::runtime_error("No font atlases found in 'font_atlases/' directory.");
+    }
+}
+
 void Application::initGeometry() {
     float vertices[] = {
-        // positions          // texture coords (y-axis flipped)
          1.0f,  1.0f, 0.0f,   1.0f, 0.0f,
          1.0f, -1.0f, 0.0f,   1.0f, 1.0f,
         -1.0f, -1.0f, 0.0f,   0.0f, 1.0f,
@@ -257,7 +264,8 @@ void Application::initTextures() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    loadTextureFromFile(selectedFont.path.c_str(), fontTexture, GL_TEXTURE1);
+    const FontProfile& currentFont = getCurrentFontProfile();
+    loadTextureFromFile(currentFont.path.c_str(), fontTexture, GL_TEXTURE1);
 }
 
 void Application::framebuffer_size_callback(GLFWwindow* window, int width, int height) {
@@ -276,53 +284,33 @@ void Application::updateActiveShaderUniforms() {
 
     Shader* currentShader = shaders[currentShaderIndex].get();
     const std::string& currentShaderName = shaderNames[currentShaderIndex];
+    const FontProfile& currentFont = getCurrentFontProfile();
 
     currentShader->use();
-    // Set common uniforms for all shaders
     currentShader->setInt("videoTexture", 0);
     currentShader->setInt("fontAtlas", 1);
     currentShader->setVec2("resolution", (float)camera->getWidth(), (float)camera->getHeight());
-    currentShader->setVec2("charSize", selectedFont.charWidth, selectedFont.charHeight);
-    currentShader->setFloat("numChars", selectedFont.numChars);
+    currentShader->setVec2("charSize", currentFont.charWidth, currentFont.charHeight);
+    currentShader->setFloat("numChars", currentFont.numChars);
 
-    // Find the specific configuration for the current shader
     auto it = config.shaderConfigs.find(currentShaderName);
     if (it != config.shaderConfigs.end()) {
         const ShaderConfig& shaderConf = it->second;
-        // NEW: Loop through all parameters in the config map and set them as uniforms
         for (const auto& pair : shaderConf) {
-            const std::string& uniformName = pair.first;
-            float uniformValue = pair.second;
-            currentShader->setFloat(uniformName, uniformValue);
+            currentShader->setFloat(pair.first, pair.second);
         }
     }
 }
 
-// --- NEW FUNCTION IMPLEMENTATION ---
 void Application::reloadFontTexture() {
-    if (fontProfileNames.empty()) return;
+    if (sortedFontNames.empty()) return;
 
-    // Get the name of the new profile
-    const std::string& profileName = fontProfileNames[currentFontProfileIndex];
+    const FontProfile& newFont = getCurrentFontProfile();
+    std::cout << "Switched to font profile: " << sortedFontNames[currentFontIndex] << std::endl;
 
-    // Find the profile data in the config map
-    auto it = config.fontProfiles.find(profileName);
-    if (it != config.fontProfiles.end()) {
-        selectedFont = it->second; // Update the selectedFont struct
-
-        std::cout << "Switched to font profile: " << profileName << std::endl;
-
-        // Delete the old texture to prevent memory leaks
-        glDeleteTextures(1, &fontTexture);
-
-        // Load the new texture
-        loadTextureFromFile(selectedFont.path.c_str(), fontTexture, GL_TEXTURE1);
-
-        // After changing the font, we must update the shader uniforms
-        updateActiveShaderUniforms();
-    } else {
-        std::cerr << "Could not find font profile: " << profileName << std::endl;
-    }
+    glDeleteTextures(1, &fontTexture);
+    loadTextureFromFile(newFont.path.c_str(), fontTexture, GL_TEXTURE1);
+    updateActiveShaderUniforms();
 }
 
 void Application::handleKey(int key, int action) {
@@ -332,30 +320,32 @@ void Application::handleKey(int key, int action) {
         }
         
         if (key == GLFW_KEY_RIGHT) {
-            // Cycle to the next shader, wrapping around
             currentShaderIndex = (currentShaderIndex + 1) % shaders.size();
             updateActiveShaderUniforms();
             std::cout << "Switched to shader: " << shaderNames[currentShaderIndex] << std::endl;
         }
         if (key == GLFW_KEY_LEFT) {
-            // Cycle to the previous shader, wrapping around
             currentShaderIndex = (currentShaderIndex + shaders.size() - 1) % shaders.size();
             updateActiveShaderUniforms();
             std::cout << "Switched to shader: " << shaderNames[currentShaderIndex] << std::endl;
         }
-
-        // --- NEW KEY HANDLERS FOR FONT TOGGLING ---
+        
         if (key == GLFW_KEY_UP) {
-            if (!fontProfileNames.empty()) {
-                currentFontProfileIndex = (currentFontProfileIndex + fontProfileNames.size() - 1) % fontProfileNames.size();
+            if (!sortedFontNames.empty()) {
+                currentFontIndex = (currentFontIndex + sortedFontNames.size() - 1) % sortedFontNames.size();
                 reloadFontTexture();
             }
         }
         if (key == GLFW_KEY_DOWN) {
-            if (!fontProfileNames.empty()) {
-                currentFontProfileIndex = (currentFontProfileIndex + 1) % fontProfileNames.size();
+            if (!sortedFontNames.empty()) {
+                currentFontIndex = (currentFontIndex + 1) % sortedFontNames.size();
                 reloadFontTexture();
             }
         }
     }
+}
+
+const FontProfile& Application::getCurrentFontProfile() const {
+    const std::string& currentFontName = sortedFontNames[currentFontIndex];
+    return availableFonts.at(currentFontName);
 }

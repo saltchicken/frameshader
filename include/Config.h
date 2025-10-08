@@ -1,33 +1,31 @@
 #pragma once
-
 #include <string>
 #include <vector>
 #include <map>
 
-// FontProfile remains the same
+using ShaderConfig = std::map<std::string, float>;
+using FontConfig = std::map<std::string, float>;
+
 struct FontProfile {
     std::string path;
-    float charWidth = 0.0f;
-    float charHeight = 0.0f;
-    float numChars = 0.0f;
+    float charWidth = 10.0f;
+    float charHeight = 20.0f;
+    float numChars = 95.0f;
 };
 
-// MODIFIED: ShaderConfig is now a flexible map
-using ShaderConfig = std::map<std::string, float>;
-
-// Main application configuration struct
 struct AppConfig {
     // Camera settings
     int cameraDeviceID = 0;
-    int cameraWidth = 1920;
-    int cameraHeight = 1080;
+    int cameraWidth = 1280;
+    int cameraHeight = 720;
 
-    // Font settings
-    std::map<std::string, FontProfile> fontProfiles;
-    std::string selectedFontProfile = "default";
+    // The name of the font profile to load initially
+    std::string selectedFontProfile = "dejavu_sans_mono_20";
 
-    // This map now holds ShaderConfig maps
+    // Maps to hold overrides from the .ini file
     std::map<std::string, ShaderConfig> shaderConfigs;
+    std::map<std::string, FontConfig> fontConfigs; // <-- MODIFIED
 };
 
+// Public interface for loading configuration
 AppConfig load_configuration(int argc, char* argv[]);
