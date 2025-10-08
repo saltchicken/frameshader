@@ -5,6 +5,7 @@
 #include <opencv2/imgproc.hpp>
 #include <algorithm> // <-- Add for std::sort and std::find
 #include <iterator>  // <-- Add for std::distance
+#include <filesystem>
 
 namespace {
 // Helper function for loading textures, moved from main.cpp
@@ -182,12 +183,24 @@ bool Application::initGLAD() {
 }
 
 void Application::initShader() {
-    // Define the paths to your fragment shaders
-    fragmentShaderPaths = {
-        "shaders/frag/ascii.frag",
-        "shaders/frag/ascii_matrix.frag",
-        "shaders/frag/ascii_matrix_color.frag"
-    };
+ std::vector<std::string> fragmentShaderPaths; // Now a local variable
+    const std::string shaderDir = "shaders/frag";
+
+    try {
+        // Iterate through the directory
+        for (const auto& entry : std::filesystem::directory_iterator(shaderDir)) {
+            // Check if it's a regular file with the .frag extension
+            if (entry.is_regular_file() && entry.path().extension() == ".frag") {
+                fragmentShaderPaths.push_back(entry.path().string());
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::cerr << "Filesystem error while scanning for shaders: " << e.what() << std::endl;
+        throw std::runtime_error("Could not read from shader directory: " + shaderDir);
+    }
+
+    // Sort the paths alphabetically for a consistent loading order
+    std::sort(fragmentShaderPaths.begin(), fragmentShaderPaths.end());
 
     shaders.clear(); // Clear any previous shaders
     shaderNames.clear();

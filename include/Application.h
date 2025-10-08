@@ -47,7 +47,6 @@ private:
 
     // Shader Management
     std::vector<std::unique_ptr<Shader>> shaders;
-    std::vector<std::string> fragmentShaderPaths;
     std::vector<std::string> shaderNames;
     size_t currentShaderIndex = 0;
 
