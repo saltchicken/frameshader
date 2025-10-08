@@ -1,13 +1,19 @@
 #pragma once
+
+#include <string>
+#include <vector>
+#include <memory>
+#include <map>
+#include <filesystem> // <-- Make sure this is included
+
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+
 #include "Config.h"
 #include "Camera.h"
 #include "Shader.h"
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-#include <memory>
-#include <vector>
-#include <string>
-#include <map>
+
+// ... (FontProfile struct)
 
 class Application {
 public:
@@ -20,44 +26,47 @@ private:
     void mainLoop();
     void cleanup();
 
-    // Initialization
     bool loadConfig(int argc, char* argv[]);
     bool initCamera();
     bool initWindow();
     bool initGLAD();
+
     void initShader();
-    void initFonts(); // <-- NEW
+    void initFonts();
     void initGeometry();
     void initTextures();
 
-    // Input Handling
-    void handleKey(int key, int action);
-
-    // Callbacks
     static void framebuffer_size_callback(GLFWwindow* window, int width, int height);
     static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
-    // Helpers
     void updateActiveShaderUniforms();
     void reloadFontTexture();
-    const FontProfile& getCurrentFontProfile() const; // <-- NEW HELPER
+    void handleKey(int key, int action);
 
-    // Member Variables
+    // --- ADD THIS FUNCTION DECLARATION ---
+    void reloadConfiguration();
+    // ------------------------------------
+
+    const FontProfile& getCurrentFontProfile() const;
+
     GLFWwindow* window = nullptr;
     std::unique_ptr<Camera> camera;
+    std::unique_ptr<Shader> shader;
+    AppConfig config;
+
     GLuint VAO, VBO, EBO;
     GLuint videoTexture, fontTexture;
 
-    // Shader Management
     std::vector<std::unique_ptr<Shader>> shaders;
     std::vector<std::string> shaderNames;
-    size_t currentShaderIndex = 0;
-
-    // Config Management
-    AppConfig config;
-
-    // --- NEW: Font Profile Management ---
+    int currentShaderIndex = 0;
+    
     std::map<std::string, FontProfile> availableFonts;
     std::vector<std::string> sortedFontNames;
-    size_t currentFontIndex = 0;
+    int currentFontIndex = 0;
+
+    // --- AND ADD THESE MEMBER VARIABLES ---
+    std::string configFilePath;
+    std::filesystem::file_time_type lastConfigWriteTime;
+    // ------------------------------------
 };

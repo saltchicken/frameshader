@@ -84,6 +84,13 @@ void Application::mainLoop() {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frame.cols, frame.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, frame.data);
 
     while (!glfwWindowShouldClose(window)) {
+        if (!configFilePath.empty() && std::filesystem::exists(configFilePath)) {
+            auto currentWriteTime = std::filesystem::last_write_time(configFilePath);
+            if (currentWriteTime > lastConfigWriteTime) {
+                reloadConfiguration();
+                lastConfigWriteTime = currentWriteTime;
+            }
+        }
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, videoTexture);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, frame.cols, frame.rows, GL_BGR, GL_UNSIGNED_BYTE, frame.data);
@@ -121,6 +128,15 @@ void Application::cleanup() {
 
 bool Application::loadConfig(int argc, char* argv[]) {
     config = load_configuration(argc, argv);
+
+    const char* homeDir = getenv("HOME");
+    if (homeDir) {
+        configFilePath = std::string(homeDir) + "/.config/frame_shader/config.ini";
+        if (std::filesystem::exists(configFilePath)) {
+            lastConfigWriteTime = std::filesystem::last_write_time(configFilePath);
+        }
+    }
+
     return true;
 }
 
@@ -349,6 +365,10 @@ void Application::handleKey(int key, int action) {
         if (key == GLFW_KEY_ESCAPE) {
             glfwSetWindowShouldClose(window, true);
         }
+
+        if (key == GLFW_KEY_R) {
+            reloadConfiguration();
+        }
         
         if (key == GLFW_KEY_RIGHT) {
             currentShaderIndex = (currentShaderIndex + 1) % shaders.size();
@@ -379,4 +399,14 @@ void Application::handleKey(int key, int action) {
 const FontProfile& Application::getCurrentFontProfile() const {
     const std::string& currentFontName = sortedFontNames[currentFontIndex];
     return availableFonts.at(currentFontName);
+}
+
+void Application::reloadConfiguration() {
+    std::cout << "Configuration file changed. Reloading settings..." << std::endl;
+    
+    // Re-parse the ini file over our existing config struct
+    load_from_ini(config);
+    
+    // Re-apply the new settings to the currently active shader
+    updateActiveShaderUniforms();
 }

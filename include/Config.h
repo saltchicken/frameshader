@@ -30,3 +30,4 @@ struct AppConfig {
 
 // Public interface for loading configuration
 AppConfig load_configuration(int argc, char* argv[]);
+void load_from_ini(AppConfig& config);

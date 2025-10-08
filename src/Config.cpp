@@ -44,7 +44,7 @@ static int config_handler(void* user, const char* section, const char* name, con
 }
 
 // Load from INI file
-static void load_from_ini(AppConfig& config) {
+void load_from_ini(AppConfig& config) {
     const char* homeDir = getenv("HOME");
     if (!homeDir) return;
     std::string configPath = std::string(homeDir) + "/.config/frame_shader/config.ini";
