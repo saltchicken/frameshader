@@ -64,6 +64,11 @@ void Application::init() {
     if (!initWindow()) throw std::runtime_error("Window initialization failed");
     if (!initGLAD()) throw std::runtime_error("GLAD initialization failed");
     
+    segmentationModel = std::make_unique<fs::SegmentationModel>("models/selfie_segmentation.onnx");
+    if (!segmentationModel->init()) {
+        throw std::runtime_error("Failed to initialize segmentation model.");
+    }
+
     initShader();
     initFonts();
     initGeometry();
@@ -94,6 +99,13 @@ void Application::mainLoop() {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, videoTexture);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, frame.cols, frame.rows, GL_BGR, GL_UNSIGNED_BYTE, frame.data);
+
+        cv::Mat mask = segmentationModel->infer(frame);
+        glActiveTexture(GL_TEXTURE2); // Use texture unit 2 for the mask
+        glBindTexture(GL_TEXTURE_2D, maskTexture);
+        // We use GL_RED since the mask is single-channel
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, mask.cols, mask.rows, GL_RED, GL_UNSIGNED_BYTE, mask.data);
+
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         
@@ -119,7 +131,7 @@ void Application::cleanup() {
     glDeleteBuffers(1, &EBO);
     glDeleteTextures(1, &videoTexture);
     glDeleteTextures(1, &fontTexture);
-
+    glDeleteTextures(1, &maskTexture); // NEW: Cleanup mask texture
     if (window) {
         glfwDestroyWindow(window);
     }
@@ -315,6 +327,14 @@ void Application::initTextures() {
 
     const FontProfile& currentFont = getCurrentFontProfile();
     loadTextureFromFile(currentFont.path.c_str(), fontTexture, GL_TEXTURE1);
+
+    glGenTextures(1, &maskTexture);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, maskTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // Initialize with empty data; it will be updated each frame
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, camera->getWidth(), camera->getHeight(), 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
 }
 
 void Application::framebuffer_size_callback(GLFWwindow* window, int width, int height) {
@@ -338,6 +358,7 @@ void Application::updateActiveShaderUniforms() {
     currentShader->use();
     currentShader->setInt("videoTexture", 0);
     currentShader->setInt("fontAtlas", 1);
+    currentShader->setInt("maskTexture", 2); // NEW: Set mask texture uniform
     currentShader->setVec2("resolution", (float)camera->getWidth(), (float)camera->getHeight());
     currentShader->setVec2("charSize", currentFont.charWidth, currentFont.charHeight);
     currentShader->setFloat("numChars", currentFont.numChars);
