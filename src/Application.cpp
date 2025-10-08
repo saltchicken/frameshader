@@ -208,6 +208,8 @@ void Application::initShader() {
     }
 }
 
+// TODO: This is triggered whenever the configuration file changes. Potential to make this more efficient
+// by only reloading the fonts that have changed and not iterating through directory etc.
 void Application::initFonts() {
     const std::string fontDir = "font_atlases";
     availableFonts.clear(); // Clear any pre-existing font data
@@ -406,6 +408,7 @@ void Application::reloadConfiguration() {
     
     // Re-parse the ini file over our existing config struct
     load_from_ini(config);
+    initFonts();
     
     // Re-apply the new settings to the currently active shader
     updateActiveShaderUniforms();
