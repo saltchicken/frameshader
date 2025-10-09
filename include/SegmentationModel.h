@@ -1,21 +1,20 @@
 #pragma once
 
 #include <string>
-#include <memory>
 #include <vector>
+#include <memory>
 #include <opencv2/opencv.hpp>
 #include <NvInfer.h>
 
 namespace fs {
 
-// Helper to manage TensorRT object lifetime
-template<typename T>
+// Smart pointer deleter for TensorRT objects
+template <typename T>
 struct TrtDeleter {
     void operator()(T* obj) const;
 };
 
-// Define a unique_ptr type with our custom deleter
-template<typename T>
+template <typename T>
 using TrtUniquePtr = std::unique_ptr<T, TrtDeleter<T>>;
 
 class Logger : public nvinfer1::ILogger {
@@ -24,40 +23,46 @@ class Logger : public nvinfer1::ILogger {
 
 class SegmentationModel {
 public:
-    SegmentationModel(const std::string& onnxPath);
+    explicit SegmentationModel(const std::string& onnxPath);
     ~SegmentationModel();
 
     bool init();
     cv::Mat infer(const cv::Mat& inputImage);
 
 private:
-    bool buildEngine();
     bool loadEngine();
+    bool buildEngine();
     void preprocess(const cv::Mat& inputImage, std::vector<float>& buffer);
 
+    // --- MODEL PARAMETERS ---
+    const int inputWidth = 640;
+    const int inputHeight = 640;
+    const int inputChannels = 3;
+
+    // YOLOv11-Seg specific outputs
+    const int numClasses = 80;
+    const int numMaskCoeffs = 32;
+    const int outputDetElements = 8400 * (4 + numClasses + numMaskCoeffs); 
+    const int outputMaskWidth = 160;
+    const int outputMaskHeight = 160;
+    const int outputMaskElements = numMaskCoeffs * outputMaskWidth * outputMaskHeight;
+    cv::Mat lastGoodMask;
+    int framesWithoutDetection = 0;
+
+    // --- CLASS MEMBERS ---
     std::string onnxFilePath;
     std::string engineFilePath;
-
     Logger logger;
-    
-    // --- THIS IS THE FIX ---
-    // Use our custom TrtUniquePtr for all TensorRT objects
     TrtUniquePtr<nvinfer1::IRuntime> runtime;
     TrtUniquePtr<nvinfer1::ICudaEngine> engine;
     TrtUniquePtr<nvinfer1::IExecutionContext> context;
-
-    void* buffers[2]; // 0 for input, 1 for output
-    cudaStream_t stream;
-
-    // Model input dimensions
-    const int inputWidth = 256;
-    const int inputHeight = 256;
-    const int inputChannels = 3;
+    cudaStream_t stream = nullptr;
     
-    // Model output dimensions
-    const int outputWidth = 256;
-    const int outputHeight = 256;
-    const int outputChannels = 1;
+    void* buffers[3]{nullptr, nullptr, nullptr}; 
+    
+    // --- Pre-processing helpers ---
+    float scale;
+    int padX, padY;
 };
 
 } // namespace fs

@@ -64,7 +64,7 @@ void Application::init() {
     if (!initWindow()) throw std::runtime_error("Window initialization failed");
     if (!initGLAD()) throw std::runtime_error("GLAD initialization failed");
     
-    segmentationModel = std::make_unique<fs::SegmentationModel>("models/selfie_segmentation.onnx");
+    segmentationModel = std::make_unique<fs::SegmentationModel>("models/yolo11n-seg.onnx");
     if (!segmentationModel->init()) {
         throw std::runtime_error("Failed to initialize segmentation model.");
     }
