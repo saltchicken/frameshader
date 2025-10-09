@@ -16,6 +16,7 @@ public:
 
     // Activates the shader program
     void use() const;
+    bool usesUniform(const std::string& name) const;
 
     // Utility uniform functions
     void setBool(const std::string &name, bool value) const;

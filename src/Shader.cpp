@@ -69,6 +69,11 @@ void Shader::use() const {
     glUseProgram(ID);
 }
 
+bool Shader::usesUniform(const std::string& name) const {
+    // getUniformLocation returns -1 if the uniform is not found.
+    return getUniformLocation(name) != -1;
+}
+
 void Shader::setBool(const std::string &name, bool value) const {
     glUniform1i(getUniformLocation(name), (int)value);
 }

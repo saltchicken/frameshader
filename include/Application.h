@@ -59,6 +59,8 @@ private:
     int currentShaderIndex = 0;
 
     std::unique_ptr<fs::SegmentationModel> segmentationModel;
+    bool currentShaderUsesMask = false;
+    
 
     // Font-related members
     std::map<std::string, FontProfile> availableFonts;

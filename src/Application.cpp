@@ -100,11 +100,13 @@ void Application::mainLoop() {
         glBindTexture(GL_TEXTURE_2D, videoTexture);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, frame.cols, frame.rows, GL_BGR, GL_UNSIGNED_BYTE, frame.data);
 
+        if (currentShaderUsesMask) {
         cv::Mat mask = segmentationModel->infer(frame);
         glActiveTexture(GL_TEXTURE2); // Use texture unit 2 for the mask
         glBindTexture(GL_TEXTURE_2D, maskTexture);
         // We use GL_RED since the mask is single-channel
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, mask.cols, mask.rows, GL_RED, GL_UNSIGNED_BYTE, mask.data);
+    }
 
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -369,6 +371,13 @@ void Application::updateActiveShaderUniforms() {
         for (const auto& pair : shaderConf) {
             currentShader->setFloat(pair.first, pair.second);
         }
+    }
+
+  currentShaderUsesMask = currentShader->usesUniform("maskTexture");
+    if (currentShaderUsesMask) {
+        std::cout << "Shader '" << currentShaderName << "' uses segmentation mask. Model is ENABLED." << std::endl;
+    } else {
+        std::cout << "Shader '" << currentShaderName << "' does not use segmentation mask. Model is DISABLED." << std::endl;
     }
 }
 
