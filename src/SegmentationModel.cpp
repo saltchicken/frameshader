@@ -124,6 +124,9 @@ void fs::SegmentationModel::preprocess(const cv::Mat& inputImage, std::vector<fl
     cv::Mat resizedImage;
     cv::resize(inputImage, resizedImage, cv::Size(inputWidth, inputHeight));
 
+    // TODO: Check if this is necessary
+    cv::cvtColor(resizedImage, resizedImage, cv::COLOR_BGR2RGB);
+
     // 2. Convert to float and normalize to [0, 1]
     cv::Mat floatImage;
     resizedImage.convertTo(floatImage, CV_32F, 1.0 / 255.0);
