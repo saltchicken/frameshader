@@ -60,7 +60,7 @@ target_link_libraries(OpenCV_lib INTERFACE ${OpenCV_LIBS})
 set(SOURCES
     src/main.cpp
     src/Application.cpp
-    src/glad.c
+    libs/glad/src/glad.c
     src/Shader.cpp
     src/Config.cpp
     src/Camera.cpp
@@ -70,6 +70,7 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE 
     include
+    ${CMAKE_CURRENT_SOURCE_DIR}/libs/glad/include
     ${inih_SOURCE_DIR}
     ${MANUAL_CUDA_INCLUDE_DIR}
 )
