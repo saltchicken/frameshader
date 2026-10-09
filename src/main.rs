@@ -3,8 +3,20 @@ use nokhwa::pixel_format::RgbFormat;
 use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
 use nokhwa::Camera;
 use std::ffi::CString;
-use std::fs;
 use std::ptr;
+
+// Create a struct to hold our compiled programs and their uniform locations
+struct ShaderProgram {
+    id: u32,
+    // Caching these avoids hitting the OpenGL string lookup every frame
+    loc_video_texture: i32,
+    loc_font_atlas: i32,
+    loc_resolution: i32,
+    loc_char_size: i32,
+    loc_num_chars: i32,
+    loc_sensitivity: i32,
+    loc_time: i32,
+}
 
 fn main() {
     // 1. Initialize Windowing (GLFW)
@@ -23,8 +35,7 @@ fn main() {
     // 2. Initialize Camera (nokhwa)
     println!("Initializing camera at Index 0...");
     
-    // Instead of forcing a specific format (which the camera rejected), 
-    // we ask nokhwa to look at what the camera supports and pick the highest resolution.
+    // Ask nokhwa to look at what the camera supports and pick the highest resolution
     let mut cam = Camera::new(
         CameraIndex::Index(0),
         RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
@@ -33,9 +44,12 @@ fn main() {
     cam.open_stream().expect("Failed to open camera stream");
     
     let actual_format = cam.camera_format();
+    let cam_width = actual_format.resolution().width();
+    let cam_height = actual_format.resolution().height();
+    
     println!("Camera stream opened successfully at {}x{} ({} fps)", 
-        actual_format.resolution().width(), 
-        actual_format.resolution().height(),
+        cam_width, 
+        cam_height,
         actual_format.frame_rate()
     );
 
@@ -68,6 +82,7 @@ fn main() {
     }
 
     // 4. Load Font Atlas Texture (image crate)
+    // Note: Since this is read at runtime, ensure the font_atlases directory is present next to the executable.
     let img = image::open("font_atlases/dejavu_sans_mono-10-8x16.png")
         .expect("Failed to load font atlas")
         .into_rgba8();
@@ -84,7 +99,7 @@ fn main() {
         );
     }
 
-    // 5. Setup Camera Video Texture
+    // 5. Setup Camera Video Texture (OPTIMIZED)
     let mut video_texture = 0;
     unsafe {
         gl::GenTextures(1, &mut video_texture);
@@ -93,23 +108,47 @@ fn main() {
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
         
-        // Tell OpenGL not to expect standard 4-byte padding to prevent skewing/crashing 
-        // on weird camera resolutions.
+        // Prevent skewing/crashing on weird camera resolutions
         gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
+        
+        // Allocate empty GPU memory ONCE using the known camera resolution
+        gl::TexImage2D(
+            gl::TEXTURE_2D, 0, gl::RGB as i32, 
+            cam_width as i32, cam_height as i32, 
+            0, gl::RGB, gl::UNSIGNED_BYTE, ptr::null()
+        );
     }
 
-    // 6. Compile Shaders
-    let frag_shaders = [
-        "shaders/frag/ascii.frag",
-        "shaders/frag/ascii_matrix.frag",
-        "shaders/frag/ascii_matrix_color.frag",
-        "shaders/frag/ascii_matrix_flux.frag",
+    // 6. Compile Shaders (PORTABILITY + CACHING)
+    // include_str! embeds the shaders directly into the binary at compile time.
+    let vert_src = include_str!("../shaders/vert/shader.vert");
+    
+    // We pair a human-readable name with the baked-in source string
+    let fragment_sources = [
+        ("ASCII", include_str!("../shaders/frag/ascii.frag")),
+        ("Matrix", include_str!("../shaders/frag/ascii_matrix.frag")),
+        ("Color", include_str!("../shaders/frag/ascii_matrix_color.frag")),
+        ("Flux", include_str!("../shaders/frag/ascii_matrix_flux.frag")),
     ];
 
     let mut shader_programs = Vec::new();
-    for frag in frag_shaders.iter() {
-        println!("Compiling {}...", frag);
-        shader_programs.push(compile_shader_program("shaders/vert/shader.vert", frag));
+    for (name, frag_src) in fragment_sources.iter() {
+        println!("Compiling {}...", name);
+        let id = compile_shader_program(vert_src, frag_src);
+        
+        // Cache uniform locations at startup
+        unsafe {
+            shader_programs.push(ShaderProgram {
+                id,
+                loc_video_texture: gl::GetUniformLocation(id, c"videoTexture".as_ptr()),
+                loc_font_atlas: gl::GetUniformLocation(id, c"fontAtlas".as_ptr()),
+                loc_resolution: gl::GetUniformLocation(id, c"resolution".as_ptr()),
+                loc_char_size: gl::GetUniformLocation(id, c"charSize".as_ptr()),
+                loc_num_chars: gl::GetUniformLocation(id, c"numChars".as_ptr()),
+                loc_sensitivity: gl::GetUniformLocation(id, c"sensitivity".as_ptr()),
+                loc_time: gl::GetUniformLocation(id, c"time".as_ptr()),
+            });
+        }
     }
 
     let mut current_mode = 0; 
@@ -127,24 +166,12 @@ fn main() {
                 // Cycle modes on Space
                 glfw::WindowEvent::Key(Key::Space, _, Action::Press, _) => {
                     current_mode = (current_mode + 1) % shader_programs.len();
-                    println!("Switched to: {}", frag_shaders[current_mode]);
+                    println!("Switched to: {}", fragment_sources[current_mode].0);
                 },
-                // Jump to specific modes using numbers 1-4
-                glfw::WindowEvent::Key(Key::Num1, _, Action::Press, _) => {
-                    current_mode = 0;
-                    println!("Switched to: {}", frag_shaders[current_mode]);
-                },
-                glfw::WindowEvent::Key(Key::Num2, _, Action::Press, _) => {
-                    current_mode = 1;
-                    println!("Switched to: {}", frag_shaders[current_mode]);
-                },
-                glfw::WindowEvent::Key(Key::Num3, _, Action::Press, _) => {
-                    current_mode = 2;
-                    println!("Switched to: {}", frag_shaders[current_mode]);
-                },
-                glfw::WindowEvent::Key(Key::Num4, _, Action::Press, _) => {
-                    current_mode = 3;
-                    println!("Switched to: {}", frag_shaders[current_mode]);
+                // Idiomatic pattern matching for number keys 1-4
+                glfw::WindowEvent::Key(key @ (Key::Num1 | Key::Num2 | Key::Num3 | Key::Num4), _, Action::Press, _) => {
+                    current_mode = (key as usize) - (Key::Num1 as usize);
+                    println!("Switched to: {}", fragment_sources[current_mode].0);
                 },
                 _ => {}
             }
@@ -159,33 +186,35 @@ fn main() {
         // Grab frame from webcam and decode it to pure RGB pixels
         if let Ok(frame) = cam.frame() {
             if let Ok(decoded) = frame.decode_image::<RgbFormat>() {
+                let prog = &shader_programs[current_mode];
+
                 unsafe {
                     gl::ActiveTexture(gl::TEXTURE0);
                     gl::BindTexture(gl::TEXTURE_2D, video_texture);
                     
-                    // Upload RGB pixels directly to the GPU
-                    gl::TexImage2D(
-                        gl::TEXTURE_2D, 0, gl::RGB as i32, 
+                    // PERFORMANCE FIX: Use TexSubImage2D to update existing memory 
+                    // rather than reallocating memory every frame.
+                    gl::TexSubImage2D(
+                        gl::TEXTURE_2D, 0, 0, 0, 
                         decoded.width() as i32, decoded.height() as i32, 
-                        0, gl::RGB, gl::UNSIGNED_BYTE, 
+                        gl::RGB, gl::UNSIGNED_BYTE, 
                         decoded.as_raw().as_ptr() as *const _
                     );
 
-                    // Grab the active shader program
-                    let active_program = shader_programs[current_mode];
-                    gl::UseProgram(active_program);
+                    // Use active shader program
+                    gl::UseProgram(prog.id);
                     
-                    // Use Shader & Set Uniforms
-                    set_uniform_1i(active_program, "videoTexture", 0);
-                    set_uniform_1i(active_program, "fontAtlas", 1);
-                    set_uniform_2f(active_program, "resolution", decoded.width() as f32, decoded.height() as f32);
-                    set_uniform_2f(active_program, "charSize", 8.0, 16.0);
-                    set_uniform_1f(active_program, "numChars", 10.0);
-                    set_uniform_1f(active_program, "sensitivity", 1.5);
+                    // Set uniforms using the pre-cached locations
+                    // Note: Unused uniforms in specific shaders will silently be ignored by OpenGL (location = -1)
+                    if prog.loc_video_texture != -1 { gl::Uniform1i(prog.loc_video_texture, 0); }
+                    if prog.loc_font_atlas != -1 { gl::Uniform1i(prog.loc_font_atlas, 1); }
+                    if prog.loc_resolution != -1 { gl::Uniform2f(prog.loc_resolution, decoded.width() as f32, decoded.height() as f32); }
+                    if prog.loc_char_size != -1 { gl::Uniform2f(prog.loc_char_size, 8.0, 16.0); }
+                    if prog.loc_num_chars != -1 { gl::Uniform1f(prog.loc_num_chars, 10.0); }
+                    if prog.loc_sensitivity != -1 { gl::Uniform1f(prog.loc_sensitivity, 1.5); }
                     
-                    // Get time from GLFW and pass it to the matrix shaders so the rain animates
-                    let time = glfw.get_time() as f32;
-                    set_uniform_1f(active_program, "time", time);
+                    // Pass time to the matrix shaders so the rain animates
+                    if prog.loc_time != -1 { gl::Uniform1f(prog.loc_time, glfw.get_time() as f32); }
 
                     // Draw
                     gl::BindVertexArray(vao);
@@ -197,21 +226,19 @@ fn main() {
     }
 }
 
-// --- Minimal Helper Functions ---
+// --- Helper Functions ---
 
-fn compile_shader_program(vert_path: &str, frag_path: &str) -> u32 {
-    let v_src = fs::read_to_string(vert_path).expect("Failed to read vertex shader");
-    let f_src = fs::read_to_string(frag_path).expect("Failed to read fragment shader");
-
+// Modified to take raw string slices from include_str! instead of file paths
+fn compile_shader_program(v_src: &str, f_src: &str) -> u32 {
     unsafe {
         let vertex = gl::CreateShader(gl::VERTEX_SHADER);
-        let c_str_v = CString::new(v_src.as_bytes()).unwrap();
+        let c_str_v = CString::new(v_src).unwrap();
         gl::ShaderSource(vertex, 1, &c_str_v.as_ptr(), ptr::null());
         gl::CompileShader(vertex);
         check_shader_compile(vertex, "VERTEX");
 
         let fragment = gl::CreateShader(gl::FRAGMENT_SHADER);
-        let c_str_f = CString::new(f_src.as_bytes()).unwrap();
+        let c_str_f = CString::new(f_src).unwrap();
         gl::ShaderSource(fragment, 1, &c_str_f.as_ptr(), ptr::null());
         gl::CompileShader(fragment);
         check_shader_compile(fragment, "FRAGMENT");
@@ -238,29 +265,5 @@ unsafe fn check_shader_compile(shader: u32, shader_type: &str) {
         let mut buffer: Vec<u8> = vec![0; len as usize];
         gl::GetShaderInfoLog(shader, len, ptr::null_mut(), buffer.as_mut_ptr() as *mut i8);
         panic!("{} Shader Compilation Error:\n{}", shader_type, String::from_utf8_lossy(&buffer));
-    }
-}
-
-unsafe fn set_uniform_1i(program: u32, name: &str, value: i32) {
-    let c_name = CString::new(name).unwrap();
-    let location = gl::GetUniformLocation(program, c_name.as_ptr());
-    if location != -1 {
-        gl::Uniform1i(location, value);
-    }
-}
-
-unsafe fn set_uniform_1f(program: u32, name: &str, value: f32) {
-    let c_name = CString::new(name).unwrap();
-    let location = gl::GetUniformLocation(program, c_name.as_ptr());
-    if location != -1 {
-        gl::Uniform1f(location, value);
-    }
-}
-
-unsafe fn set_uniform_2f(program: u32, name: &str, v1: f32, v2: f32) {
-    let c_name = CString::new(name).unwrap();
-    let location = gl::GetUniformLocation(program, c_name.as_ptr());
-    if location != -1 {
-        gl::Uniform2f(location, v1, v2);
     }
 }
