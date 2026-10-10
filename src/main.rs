@@ -266,6 +266,10 @@ fn main() {
         ("Vortex", include_str!("../shaders/frag/vortex.frag")),
         ("Topography", include_str!("../shaders/frag/topography.frag")),
         ("Comic", include_str!("../shaders/frag/comic.frag")),
+        ("Thermal", include_str!("../shaders/frag/thermal.frag")),
+        ("Paint", include_str!("../shaders/frag/paint.frag")),
+        ("NightVision", include_str!("../shaders/frag/nightvision.frag")),
+        ("Dither", include_str!("../shaders/frag/dither.frag")),
     ];
 
     let mut shader_programs = Vec::new();
@@ -310,7 +314,7 @@ fn main() {
     // Create default file if it doesn't exist, using a raw string to preserve comments
     if !std::path::Path::new(config_path).exists() {
         let default_config_str = r#"{
-  // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "Halftone"
+// The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "Halftone", "Prism", "GlitchSort", "Vortex", "Topography", "Comic", "Thermal", "Paint", "NightVision", "Dither"
   "mode": "Flux",
   
   // Crop parameters (0.0 to 1.0 for percentage of edges to remove)

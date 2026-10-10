@@ -1,6 +1,6 @@
 {
   // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "halftone", "Prism", "GlitchSort", "Vortex", "Topography"
-  "mode": "Comic",
+  "mode": "dither",
 
   "crop": {
     "left": 0.0,
@@ -32,9 +32,9 @@
     "treble_bin_end": 100,
     "smoothing_old": 0.7,
     "smoothing_new": 0.3,
-    "bass_norm_factor": 75.0,
+    "bass_norm_factor": 50.0,
     "mid_norm_factor": 74.0,
-    "treble_norm_factor": 500.0,
+    "treble_norm_factor": 50.0,
     "volume_norm_factor": 500.0
   }
 }
