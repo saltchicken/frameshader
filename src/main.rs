@@ -131,23 +131,23 @@ fn main() {
     let vert_src = include_str!("../shaders/vert/shader.vert");
     
     let mut shader_defs = vec![
-        ShaderDef { name: "ASCII".into(), file_name: "ascii.frag".into(), static_src: include_str!("../shaders/frag/ascii.frag"), program: None },
-        ShaderDef { name: "Matrix".into(), file_name: "ascii_matrix.frag".into(), static_src: include_str!("../shaders/frag/ascii_matrix.frag"), program: None },
-        ShaderDef { name: "Color".into(), file_name: "ascii_matrix_color.frag".into(), static_src: include_str!("../shaders/frag/ascii_matrix_color.frag"), program: None },
-        // ShaderDef { name: "Flux".into(), file_name: "ascii_matrix_flux.frag".into(), static_src: include_str!("../shaders/frag/ascii_matrix_flux.frag"), program: None },
-        // ShaderDef { name: "CRT".into(), file_name: "crt.frag".into(), static_src: include_str!("../shaders/frag/crt.frag"), program: None },
+        ShaderDef { name: "ASCII".into(), file_name: "ascii/static.frag".into(), static_src: include_str!("../shaders/frag/ascii/static.frag"), program: None },
+        ShaderDef { name: "Matrix".into(), file_name: "ascii/matrix/matrix.frag".into(), static_src: include_str!("../shaders/frag/ascii/matrix/matrix.frag"), program: None },
+        ShaderDef { name: "Color".into(), file_name: "ascii/matrix/color.frag".into(), static_src: include_str!("../shaders/frag/ascii/matrix/color.frag"), program: None },
+        // ShaderDef { name: "Flux".into(), file_name: "ascii/matrix/flux.frag".into(), static_src: include_str!("../shaders/frag/ascii/matrix/flux.frag"), program: None },
+        // ShaderDef { name: "CRT".into(), file_name: "archived/crt.frag".into(), static_src: include_str!("../shaders/frag/archived/crt.frag"), program: None },
         // ShaderDef { name: "Edge".into(), file_name: "edge.frag".into(), static_src: include_str!("../shaders/frag/edge.frag"), program: None },
-        // ShaderDef { name: "VHS".into(), file_name: "vhs.frag".into(), static_src: include_str!("../shaders/frag/vhs.frag"), program: None },
-        // ShaderDef { name: "Halftone".into(), file_name: "halftone.frag".into(), static_src: include_str!("../shaders/frag/halftone.frag"), program: None },
-        // ShaderDef { name: "Prism".into(), file_name: "prism.frag".into(), static_src: include_str!("../shaders/frag/prism.frag"), program: None },
-        // ShaderDef { name: "GlitchSort".into(), file_name: "glitch_sort.frag".into(), static_src: include_str!("../shaders/frag/glitch_sort.frag"), program: None },
+        // ShaderDef { name: "VHS".into(), file_name: "archived/vhs.frag".into(), static_src: include_str!("../shaders/frag/archived/vhs.frag"), program: None },
+        // ShaderDef { name: "Halftone".into(), file_name: "archived/halftone.frag".into(), static_src: include_str!("../shaders/frag/archived/halftone.frag"), program: None },
+        // ShaderDef { name: "Prism".into(), file_name: "archived/prism.frag".into(), static_src: include_str!("../shaders/frag/archived/prism.frag"), program: None },
+        // ShaderDef { name: "GlitchSort".into(), file_name: "archived/glitch_sort.frag".into(), static_src: include_str!("../shaders/frag/archived/glitch_sort.frag"), program: None },
         ShaderDef { name: "Vortex".into(), file_name: "vortex.frag".into(), static_src: include_str!("../shaders/frag/vortex.frag"), program: None },
         // ShaderDef { name: "Topography".into(), file_name: "topography.frag".into(), static_src: include_str!("../shaders/frag/topography.frag"), program: None },
-        // ShaderDef { name: "Comic".into(), file_name: "comic.frag".into(), static_src: include_str!("../shaders/frag/comic.frag"), program: None },
-        // ShaderDef { name: "Thermal".into(), file_name: "thermal.frag".into(), static_src: include_str!("../shaders/frag/thermal.frag"), program: None },
-        // ShaderDef { name: "Paint".into(), file_name: "paint.frag".into(), static_src: include_str!("../shaders/frag/paint.frag"), program: None },
-        // ShaderDef { name: "NightVision".into(), file_name: "nightvision.frag".into(), static_src: include_str!("../shaders/frag/nightvision.frag"), program: None },
-        // ShaderDef { name: "Dither".into(), file_name: "dither.frag".into(), static_src: include_str!("../shaders/frag/dither.frag"), program: None },
+        // ShaderDef { name: "Comic".into(), file_name: "archived/comic.frag".into(), static_src: include_str!("../shaders/frag/archived/comic.frag"), program: None },
+        // ShaderDef { name: "Thermal".into(), file_name: "archived/thermal.frag".into(), static_src: include_str!("../shaders/frag/archived/thermal.frag"), program: None },
+        // ShaderDef { name: "Paint".into(), file_name: "archived/paint.frag".into(), static_src: include_str!("../shaders/frag/archived/paint.frag"), program: None },
+        // ShaderDef { name: "NightVision".into(), file_name: "archived/nightvision.frag".into(), static_src: include_str!("../shaders/frag/archived/nightvision.frag"), program: None },
+        // ShaderDef { name: "Dither".into(), file_name: "archived/dither.frag".into(), static_src: include_str!("../shaders/frag/archived/dither.frag"), program: None },
         // ShaderDef { name: "Resonance".into(), file_name: "resonance.frag".into(), static_src: include_str!("../shaders/frag/resonance.frag"), program: None },
     ];
 
@@ -294,14 +294,12 @@ fn main() {
                         // Shader Hot Reloading Detection
                         if let Some(ext) = event.path.extension() {
                             if ext == "frag" {
-                                if let Some(file_name) = event.path.file_name().and_then(|s| s.to_str()) {
-                                    for def in &mut shader_defs {
-                                        if def.file_name == file_name {
-                                            if let Ok(src) = fs::read_to_string(&event.path) {
-                                                if let Some(new_prog) = compile_shader_program(vert_src, &src) {
-                                                    def.program = Some(new_prog);
-                                                    println!("Hot-reloaded shader: {}", def.name);
-                                                }
+                                for def in &mut shader_defs {
+                                    if event.path.ends_with(&def.file_name) {
+                                        if let Ok(src) = fs::read_to_string(&event.path) {
+                                            if let Some(new_prog) = compile_shader_program(vert_src, &src) {
+                                                def.program = Some(new_prog);
+                                                println!("Hot-reloaded shader: {}", def.name);
                                             }
                                         }
                                     }
