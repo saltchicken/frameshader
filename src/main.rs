@@ -1,180 +1,26 @@
+mod audio;
+mod config;
+mod shader;
+
 use glfw::{Action, Context, Key};
 use opencv::{prelude::*, videoio, imgproc, core};
 use std::env;
-use std::ffi::CString;
 use std::ptr;
 use std::sync::mpsc;
 use std::fs;
 use std::time::{Duration, Instant};
-use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
-use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
-
-// Audio Dependencies
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use rustfft::{num_complex::Complex, FftPlanner};
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
+use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
 
-// --- AUDIO GLOBALS ---
-const AUDIO_BUFFER_SIZE: usize = 512;
-
-static BASS_VAL: AtomicU32 = AtomicU32::new(0);
-static MID_VAL: AtomicU32 = AtomicU32::new(0);
-static TREBLE_VAL: AtomicU32 = AtomicU32::new(0);
-static VOLUME_VAL: AtomicU32 = AtomicU32::new(0);
-static PEAK_FREQ_VAL: AtomicU32 = AtomicU32::new(0);
-static BPM_VAL: AtomicU32 = AtomicU32::new(0);
-
-fn store_bass(val: f32) { BASS_VAL.store(val.to_bits(), Ordering::Relaxed); }
-fn get_bass() -> f32 { f32::from_bits(BASS_VAL.load(Ordering::Relaxed)) }
-
-fn store_mid(val: f32) { MID_VAL.store(val.to_bits(), Ordering::Relaxed); }
-fn get_mid() -> f32 { f32::from_bits(MID_VAL.load(Ordering::Relaxed)) }
-
-fn store_treble(val: f32) { TREBLE_VAL.store(val.to_bits(), Ordering::Relaxed); }
-fn get_treble() -> f32 { f32::from_bits(TREBLE_VAL.load(Ordering::Relaxed)) }
-
-fn store_volume(val: f32) { VOLUME_VAL.store(val.to_bits(), Ordering::Relaxed); }
-fn get_volume() -> f32 { f32::from_bits(VOLUME_VAL.load(Ordering::Relaxed)) }
-
-fn store_peak_freq(val: f32) { PEAK_FREQ_VAL.store(val.to_bits(), Ordering::Relaxed); }
-fn get_peak_freq() -> f32 { f32::from_bits(PEAK_FREQ_VAL.load(Ordering::Relaxed)) }
-
-fn store_bpm(val: f32) { BPM_VAL.store(val.to_bits(), Ordering::Relaxed); }
-fn get_bpm() -> f32 { f32::from_bits(BPM_VAL.load(Ordering::Relaxed)) }
-
-
-// 1. Define our JSON configuration structure
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(default)]
-struct AudioConfig {
-    bass_bin_start: usize,
-    bass_bin_end: usize,
-    mid_bin_start: usize,
-    mid_bin_end: usize,
-    treble_bin_start: usize,
-    treble_bin_end: usize,
-    smoothing_old: f32,
-    smoothing_new: f32,
-    bass_norm_factor: f32,
-    mid_norm_factor: f32,
-    treble_norm_factor: f32,
-    volume_norm_factor: f32,
-}
-
-impl Default for AudioConfig {
-    fn default() -> Self {
-        Self {
-            bass_bin_start: 1,
-            bass_bin_end: 3,
-            mid_bin_start: 6,
-            mid_bin_end: 22,
-            treble_bin_start: 23,
-            treble_bin_end: 100,
-            smoothing_old: 0.7,
-            smoothing_new: 0.3,
-            bass_norm_factor: 6.0,
-            mid_norm_factor: 34.0,
-            treble_norm_factor: 20.0,
-            volume_norm_factor: 100.0,
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(default)]
-struct CropConfig {
-    left: f32,
-    right: f32,
-    top: f32,
-    bottom: f32,
-}
-
-impl Default for CropConfig {
-    fn default() -> Self {
-        Self { left: 0.0, right: 0.0, top: 0.0, bottom: 0.0 }
-    }
-}
-
-impl CropConfig {
-    fn sanitize(&self) -> (f32, f32, f32, f32) {
-        fn clean(mut v: f32) -> f32 {
-            // Auto-correct whole numbers (e.g., 10 -> 0.1)
-            if v > 1.0 { v /= 100.0; }
-            // Ensure values never drop below 0 or crop more than half the screen (0.49)
-            v.clamp(0.0, 0.49) 
-        }
-        (clean(self.left), clean(self.right), clean(self.top), clean(self.bottom))
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(default)] // Allows partial JSON files (missing fields will use default)
-struct ShaderConfig {
-    mode: String,
-    crop: CropConfig,
-    font_width: f32,
-    font_height: f32,
-    num_chars: f32,
-    playback_fps: f32,
-    bpm_multiplier: f32,
-    sensitivity: f32,
-    rain_speed: f32,
-    tail_length: f32,
-    flicker_speed: f32,
-    resonance_ripples: f32,
-    audio: AudioConfig,
-}
-
-impl Default for ShaderConfig {
-    fn default() -> Self {
-        Self {
-            mode: "Flux".to_string(),
-            crop: CropConfig::default(),
-            font_width: 8.0,
-            font_height: 16.0,
-            num_chars: 10.0,
-            playback_fps: 30.0,
-            bpm_multiplier: 15.0,
-            sensitivity: 1.5,
-            rain_speed: 0.4,
-            tail_length: 0.3,
-            flicker_speed: 15.0,
-            resonance_ripples: 30.0,
-            audio: AudioConfig::default(),
-        }
-    }
-}
-
-// 2. Expand the struct to cache our new parameters
-struct ShaderProgram {
-    id: u32,
-    loc_video_texture: i32,
-    loc_font_atlas: i32,
-    loc_resolution: i32,
-    loc_char_size: i32,
-    loc_num_chars: i32,
-    loc_sensitivity: i32,
-    loc_time: i32,
-    loc_rain_speed: i32,
-    loc_tail_length: i32,
-    loc_flicker_speed: i32,
-    loc_resonance_ripples: i32,
-    loc_audio_bass: i32,
-    loc_audio_mid: i32,
-    loc_audio_treble: i32,
-    loc_audio_volume: i32,
-    loc_audio_peak_freq: i32,
-    loc_crop: i32,
-}
+use audio::{build_audio_stream, get_bass, get_bpm, get_mid, get_peak_freq, get_treble, get_volume};
+use config::load_config;
+use shader::{compile_shader_program, ShaderProgram};
 
 fn main() {
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
     glfw.window_hint(glfw::WindowHint::ContextVersion(4, 6));
     glfw.window_hint(glfw::WindowHint::OpenGlProfile(glfw::OpenGlProfileHint::Core));
 
-    // Start as a standard window (you can maximize it and the shaders will now adapt correctly!)
     let (mut window, events) = glfw.create_window(1280, 720, "frameshader", glfw::WindowMode::Windowed)
         .expect("Failed to create GLFW window.");
 
@@ -315,15 +161,12 @@ fn main() {
     let mut frame = core::Mat::default();
     let mut rgb_frame = core::Mat::default();
 
-    // 4. Setup File Watcher with Debounce
     let config_path = "controller.json";
     let (tx, rx) = mpsc::channel();
     
-    // Set a 250ms debounce window
     let mut debouncer = new_debouncer(Duration::from_millis(250), tx)
         .expect("Failed to initialize file watcher debouncer");
     
-    // Create default file if it doesn't exist, using a raw string to preserve comments
     if !std::path::Path::new(config_path).exists() {
         let default_config_str = r#"{
 // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "Halftone", "Prism", "GlitchSort", "Vortex", "Topography", "Comic", "Thermal", "Paint", "NightVision", "Dither", "Resonance"
@@ -373,11 +216,9 @@ fn main() {
     debouncer.watcher().watch(std::path::Path::new("."), RecursiveMode::NonRecursive)
         .expect("Failed to watch directory");
 
-    // Load initial state
     let mut current_config = load_config(config_path);
     let mut current_mode = get_mode_index(&current_config.mode, &fragment_sources);
     
-    // Initialize Audio
     let shared_audio_config = Arc::new(RwLock::new(current_config.audio.clone()));
     let _audio_stream = build_audio_stream(Arc::clone(&shared_audio_config))
         .expect("Failed to start audio stream");
@@ -386,7 +227,6 @@ fn main() {
 
     let mut last_video_update = Instant::now();
 
-    // 5. Main Loop
     while !window.should_close() {
         glfw.poll_events();
         
@@ -395,7 +235,6 @@ fn main() {
                 glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
                     window.set_should_close(true);
                 }
-                // Toggle fullscreen on F11
                 glfw::WindowEvent::Key(Key::F11, _, Action::Press, _) => {
                     let is_fullscreen = window.with_window_mode(|mode| {
                         match mode {
@@ -422,7 +261,6 @@ fn main() {
             }
         }
 
-        // Check if config file was modified (debounced)
         let mut config_changed = false;
         while let Ok(res) = rx.try_recv() {
             match res {
@@ -441,7 +279,6 @@ fn main() {
             current_config = load_config(config_path);
             current_mode = get_mode_index(&current_config.mode, &fragment_sources);
             
-            // Send new audio config to the audio thread
             if let Ok(mut lock) = shared_audio_config.write() {
                 *lock = current_config.audio.clone();
             }
@@ -457,10 +294,8 @@ fn main() {
             gl::Clear(gl::COLOR_BUFFER_BIT);
         }
 
-        // 1. Check if it's time to read a new video frame
         let current_bpm = get_bpm();
 
-        // Map BPM to FPS using the live multiplier from controller.json
         let target_fps = if current_bpm > 0.0 {
             (current_bpm / 60.0) * current_config.bpm_multiplier 
         } else {
@@ -477,7 +312,6 @@ fn main() {
                 update_texture = true;
                 last_video_update = Instant::now();
             } else if is_file {
-                // Loop the video if it reaches the end
                 cam.set(videoio::CAP_PROP_POS_FRAMES, 0.0).unwrap();
             } else {
                 eprintln!("Camera feed lost!");
@@ -485,14 +319,12 @@ fn main() {
             }
         }
 
-        // 2. Render the frame
         let prog = &shader_programs[current_mode];
 
         unsafe {
             gl::ActiveTexture(gl::TEXTURE0);
             gl::BindTexture(gl::TEXTURE_2D, video_texture);
             
-            // Only send new pixel data to the GPU if we actually read a new frame
             if update_texture {
                 gl::TexSubImage2D(
                     gl::TEXTURE_2D, 0, 0, 0, 
@@ -507,16 +339,13 @@ fn main() {
             if prog.loc_video_texture != -1 { gl::Uniform1i(prog.loc_video_texture, 0); }
             if prog.loc_font_atlas != -1 { gl::Uniform1i(prog.loc_font_atlas, 1); }
             
-            // Use fb_width and fb_height instead of cam_width and cam_height for correct aspect ratio scaling
             if prog.loc_resolution != -1 { gl::Uniform2f(prog.loc_resolution, fb_width as f32, fb_height as f32); }
             
-            // Use variables from config
             if prog.loc_char_size != -1 { gl::Uniform2f(prog.loc_char_size, current_config.font_width, current_config.font_height); }
             if prog.loc_num_chars != -1 { gl::Uniform1f(prog.loc_num_chars, current_config.num_chars); }
 
             if prog.loc_time != -1 { gl::Uniform1f(prog.loc_time, glfw.get_time() as f32); }
 
-            // Live Config Uniforms
             if prog.loc_crop != -1 {
                 let (c_l, c_r, c_t, c_b) = current_config.crop.sanitize();
                 gl::Uniform4f(
@@ -534,7 +363,6 @@ fn main() {
             if prog.loc_flicker_speed != -1 { gl::Uniform1f(prog.loc_flicker_speed, current_config.flicker_speed); }
             if prog.loc_resonance_ripples != -1 { gl::Uniform1f(prog.loc_resonance_ripples, current_config.resonance_ripples); }
             
-            // Live Audio Uniforms
             if prog.loc_audio_bass != -1 { gl::Uniform1f(prog.loc_audio_bass, get_bass()); }
             if prog.loc_audio_mid != -1 { gl::Uniform1f(prog.loc_audio_mid, get_mid()); }
             if prog.loc_audio_treble != -1 { gl::Uniform1f(prog.loc_audio_treble, get_treble()); }
@@ -549,210 +377,8 @@ fn main() {
     }
 }
 
-// --- Helper Functions ---
-
-fn load_config(path: &str) -> ShaderConfig {
-    if let Ok(content) = fs::read_to_string(path) {
-        // Use JSON5 parser so we can support comments
-        match json5::from_str::<ShaderConfig>(&content) {
-            Ok(config) => return config,
-            Err(e) => eprintln!("Error parsing controller.json: {} - keeping previous state.", e),
-        }
-    }
-    ShaderConfig::default()
-}
-
 fn get_mode_index(target_mode: &str, sources: &[(&str, &str)]) -> usize {
     sources.iter()
         .position(|&(name, _)| name.eq_ignore_ascii_case(target_mode))
         .unwrap_or(0) 
-}
-
-fn compile_shader_program(v_src: &str, f_src: &str) -> u32 {
-    unsafe {
-        let vertex = gl::CreateShader(gl::VERTEX_SHADER);
-        let c_str_v = CString::new(v_src).unwrap();
-        gl::ShaderSource(vertex, 1, &c_str_v.as_ptr(), ptr::null());
-        gl::CompileShader(vertex);
-        check_shader_compile(vertex, "VERTEX");
-
-        let fragment = gl::CreateShader(gl::FRAGMENT_SHADER);
-        let c_str_f = CString::new(f_src).unwrap();
-        gl::ShaderSource(fragment, 1, &c_str_f.as_ptr(), ptr::null());
-        gl::CompileShader(fragment);
-        check_shader_compile(fragment, "FRAGMENT");
-
-        let program = gl::CreateProgram();
-        gl::AttachShader(program, vertex);
-        gl::AttachShader(program, fragment);
-        gl::LinkProgram(program);
-
-        gl::DeleteShader(vertex);
-        gl::DeleteShader(fragment);
-        
-        program
-    }
-}
-
-unsafe fn check_shader_compile(shader: u32, shader_type: &str) {
-    let mut success = 0;
-    gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut success);
-    if success == 0 {
-        let mut len = 0;
-        gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
-        let mut buffer: Vec<u8> = vec![0; len as usize];
-        gl::GetShaderInfoLog(shader, len, ptr::null_mut(), buffer.as_mut_ptr() as *mut i8);
-        panic!("{} Shader Compilation Error:\n{}", shader_type, String::from_utf8_lossy(&buffer));
-    }
-}
-
-// --- Audio Functions ---
-fn build_audio_stream(shared_config: Arc<RwLock<AudioConfig>>) -> Result<cpal::Stream, anyhow::Error> {
-    let host = cpal::default_host();
-    let device = host.default_input_device().ok_or_else(|| anyhow::anyhow!("No input device found"))?;
-    let config = device.default_input_config()?;
-    
-    println!("Audio Client initialized.");
-
-    let stream = match config.sample_format() {
-        cpal::SampleFormat::F32 => run_stream::<f32>(&device, &config.into(), shared_config),
-        cpal::SampleFormat::I16 => run_stream::<i16>(&device, &config.into(), shared_config),
-        _ => anyhow::bail!("Unsupported sample format"),
-    }?;
-    
-    Ok(stream)
-}
-
-fn run_stream<T>(
-    device: &cpal::Device,
-    config: &cpal::StreamConfig,
-    shared_config: Arc<RwLock<AudioConfig>>,
-) -> Result<cpal::Stream, anyhow::Error>
-where
-    T: cpal::Sample + cpal::SizedSample,
-    f32: cpal::FromSample<T>,
-{
-    let sample_rate = config.sample_rate.0 as f32;
-    let mut planner = FftPlanner::new();
-    let fft = planner.plan_fft_forward(AUDIO_BUFFER_SIZE);
-    let mut buffer = vec![0.0f32; AUDIO_BUFFER_SIZE];
-    let mut idx = 0;
-
-    let mut bass_history: VecDeque<f32> = VecDeque::with_capacity(60);
-    let mut beat_times: VecDeque<Instant> = VecDeque::with_capacity(8);
-    let mut last_beat = Instant::now();
-
-    let stream = device.build_input_stream(
-        config,
-        move |data: &[T], _: &_| {
-            let cfg = shared_config.read().unwrap().clone();
-
-            for sample in data {
-                buffer[idx] = sample.to_sample::<f32>();
-                idx += 1;
-                
-                if idx >= AUDIO_BUFFER_SIZE {
-                    let mut complex_buffer: Vec<Complex<f32>> = buffer
-                        .iter()
-                        .map(|&v| Complex { re: v, im: 0.0 })
-                        .collect();
-                    
-                    fft.process(&mut complex_buffer);
-
-                    let mut volume = 0.0;
-                    let mut max_amp = 0.0;
-                    let mut peak_bin = 0;
-                    
-                    // Analyze up to Nyquist limit for volume and peak freq
-                    for i in 0..(AUDIO_BUFFER_SIZE / 2) {
-                        let amp = complex_buffer[i].norm();
-                        volume += amp;
-                        if amp > max_amp {
-                            max_amp = amp;
-                            peak_bin = i;
-                        }
-                    }
-
-                    let mut bass = 0.0;
-                    for i in cfg.bass_bin_start..=cfg.bass_bin_end { bass += complex_buffer[i].norm(); }
-                    
-                    let mut mid = 0.0;
-                    for i in cfg.mid_bin_start..=cfg.mid_bin_end { mid += complex_buffer[i].norm(); }
-
-                    let mut treble = 0.0;
-                    for i in cfg.treble_bin_start..=cfg.treble_bin_end { 
-                        if i < complex_buffer.len() { treble += complex_buffer[i].norm(); }
-                    }
-
-                    let old_bass = get_bass();
-                    let raw_bass = bass / cfg.bass_norm_factor;
-                    
-                    // --- BEAT DETECTION ALGORITHM ---
-                    if bass_history.len() >= 60 { bass_history.pop_front(); }
-                    bass_history.push_back(raw_bass);
-                    
-                    let avg_bass: f32 = bass_history.iter().sum::<f32>() / bass_history.len() as f32;
-                    let now = Instant::now();
-                    
-                    // 300ms min interval caps us at a max of 200 BPM to prevent double-triggering
-                    let min_beat_interval = Duration::from_millis(300); 
-
-                    // If current bass is 1.5x louder than the recent average, it's a beat onset
-                    if raw_bass > avg_bass * 1.5 && now.duration_since(last_beat) > min_beat_interval {
-                        last_beat = now;
-                        if beat_times.len() >= 8 { beat_times.pop_front(); }
-                        beat_times.push_back(now);
-
-                        // Need at least 4 beats to calculate a stable average BPM
-                        if beat_times.len() >= 4 {
-                            let mut total_duration = 0.0;
-                            for i in 1..beat_times.len() {
-                                total_duration += beat_times[i].duration_since(beat_times[i-1]).as_secs_f32();
-                            }
-                            let avg_interval = total_duration / (beat_times.len() - 1) as f32;
-                            let current_bpm = 60.0 / avg_interval;
-                            
-                            // Cap extreme values to prevent erratic framerate jumps
-                            if current_bpm > 60.0 && current_bpm < 220.0 {
-                                store_bpm(current_bpm);
-                            }
-                        }
-                    }
-                    // --- END BEAT DETECTION ---
-
-                    let new_bass = if raw_bass > old_bass { raw_bass } else { old_bass * cfg.smoothing_old + raw_bass * cfg.smoothing_new };
-                    store_bass(new_bass);
-
-                    let old_mid = get_mid();
-                    let raw_mid = mid / cfg.mid_norm_factor;
-                    let new_mid = if raw_mid > old_mid { raw_mid } else { old_mid * cfg.smoothing_old + raw_mid * cfg.smoothing_new };
-                    store_mid(new_mid);
-
-                    let old_treble = get_treble();
-                    let raw_treble = treble / cfg.treble_norm_factor;
-                    let new_treble = if raw_treble > old_treble { raw_treble } else { old_treble * cfg.smoothing_old + raw_treble * cfg.smoothing_new };
-                    store_treble(new_treble);
-
-                    let old_volume = get_volume();
-                    let raw_volume = volume / cfg.volume_norm_factor;
-                    let new_volume = if raw_volume > old_volume { raw_volume } else { old_volume * cfg.smoothing_old + raw_volume * cfg.smoothing_new };
-                    store_volume(new_volume);
-
-                    let raw_peak_freq = (peak_bin as f32 * sample_rate) / AUDIO_BUFFER_SIZE as f32;
-                    let old_peak_freq = get_peak_freq();
-                    
-                    // Smooth both the attack and decay of the frequency shifts
-                    let new_peak_freq = (old_peak_freq * 0.9) + (raw_peak_freq * 0.1);
-                    store_peak_freq(new_peak_freq);
-
-                    idx = 0;
-                }
-            }
-        },
-        |err| eprintln!("Audio stream error: {}", err),
-        None,
-    )?;
-    
-    stream.play()?;
-    Ok(stream)
 }
