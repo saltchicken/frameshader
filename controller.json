@@ -1,6 +1,6 @@
 {
   // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "halftone", "Prism", "GlitchSort", "Vortex", "Topography", "Resonance"
-  "mode": "Resonance",
+  "mode": "Topography",
 
   "crop": {
     "left": 0.0,
@@ -15,7 +15,8 @@
   "num_chars": 10.0,
   
   // Live parameters
-  "playback_fps": 60.0,
+  "playback_fps": 30.0,
+  "bpm_multiplier": 5.0,
   "sensitivity": 1.5,
 
   "rain_speed": 0.2,
@@ -34,7 +35,7 @@
     "smoothing_old": 0.7,
     "smoothing_new": 0.3,
     "bass_norm_factor": 25.0,
-    "mid_norm_factor": 74.0,
+    "mid_norm_factor": 200.0,
     "treble_norm_factor": 50.0,
     "volume_norm_factor": 500.0
   }

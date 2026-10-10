@@ -8,6 +8,7 @@ use std::fs;
 use std::time::{Duration, Instant};
 use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 
 // Audio Dependencies
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -23,6 +24,7 @@ static MID_VAL: AtomicU32 = AtomicU32::new(0);
 static TREBLE_VAL: AtomicU32 = AtomicU32::new(0);
 static VOLUME_VAL: AtomicU32 = AtomicU32::new(0);
 static PEAK_FREQ_VAL: AtomicU32 = AtomicU32::new(0);
+static BPM_VAL: AtomicU32 = AtomicU32::new(0);
 
 fn store_bass(val: f32) { BASS_VAL.store(val.to_bits(), Ordering::Relaxed); }
 fn get_bass() -> f32 { f32::from_bits(BASS_VAL.load(Ordering::Relaxed)) }
@@ -38,6 +40,9 @@ fn get_volume() -> f32 { f32::from_bits(VOLUME_VAL.load(Ordering::Relaxed)) }
 
 fn store_peak_freq(val: f32) { PEAK_FREQ_VAL.store(val.to_bits(), Ordering::Relaxed); }
 fn get_peak_freq() -> f32 { f32::from_bits(PEAK_FREQ_VAL.load(Ordering::Relaxed)) }
+
+fn store_bpm(val: f32) { BPM_VAL.store(val.to_bits(), Ordering::Relaxed); }
+fn get_bpm() -> f32 { f32::from_bits(BPM_VAL.load(Ordering::Relaxed)) }
 
 
 // 1. Define our JSON configuration structure
@@ -113,6 +118,7 @@ struct ShaderConfig {
     font_height: f32,
     num_chars: f32,
     playback_fps: f32,
+    bpm_multiplier: f32,
     sensitivity: f32,
     rain_speed: f32,
     tail_length: f32,
@@ -130,6 +136,7 @@ impl Default for ShaderConfig {
             font_height: 16.0,
             num_chars: 10.0,
             playback_fps: 30.0,
+            bpm_multiplier: 15.0,
             sensitivity: 1.5,
             rain_speed: 0.4,
             tail_length: 0.3,
@@ -337,6 +344,7 @@ fn main() {
   
   // Live parameters
   "playback_fps": 30.0,
+  "bpm_multiplier": 15.0,
   "sensitivity": 1.5,
   "rain_speed": 0.4,
   "tail_length": 0.3,
@@ -438,7 +446,7 @@ fn main() {
                 *lock = current_config.audio.clone();
             }
             
-            println!("Config reloaded: Active Mode [{}], FPS: [{}]", current_config.mode, current_config.playback_fps);
+            println!("Config reloaded: Active Mode [{}], FPS: [{}], BPM Mult: [{}]", current_config.mode, current_config.playback_fps, current_config.bpm_multiplier);
         }
 
         let (fb_width, fb_height) = window.get_framebuffer_size();
@@ -450,7 +458,16 @@ fn main() {
         }
 
         // 1. Check if it's time to read a new video frame
-        let safe_fps = if current_config.playback_fps > 0.1 { current_config.playback_fps } else { 0.1 };
+        let current_bpm = get_bpm();
+
+        // Map BPM to FPS using the live multiplier from controller.json
+        let target_fps = if current_bpm > 0.0 {
+            (current_bpm / 60.0) * current_config.bpm_multiplier 
+        } else {
+            current_config.playback_fps
+        };
+
+        let safe_fps = if target_fps > 0.1 { target_fps } else { 0.1 };
         let frame_duration = Duration::from_secs_f32(1.0 / safe_fps);
         let mut update_texture = false;
 
@@ -621,6 +638,10 @@ where
     let mut buffer = vec![0.0f32; AUDIO_BUFFER_SIZE];
     let mut idx = 0;
 
+    let mut bass_history: VecDeque<f32> = VecDeque::with_capacity(60);
+    let mut beat_times: VecDeque<Instant> = VecDeque::with_capacity(8);
+    let mut last_beat = Instant::now();
+
     let stream = device.build_input_stream(
         config,
         move |data: &[T], _: &_| {
@@ -665,6 +686,40 @@ where
 
                     let old_bass = get_bass();
                     let raw_bass = bass / cfg.bass_norm_factor;
+                    
+                    // --- BEAT DETECTION ALGORITHM ---
+                    if bass_history.len() >= 60 { bass_history.pop_front(); }
+                    bass_history.push_back(raw_bass);
+                    
+                    let avg_bass: f32 = bass_history.iter().sum::<f32>() / bass_history.len() as f32;
+                    let now = Instant::now();
+                    
+                    // 300ms min interval caps us at a max of 200 BPM to prevent double-triggering
+                    let min_beat_interval = Duration::from_millis(300); 
+
+                    // If current bass is 1.5x louder than the recent average, it's a beat onset
+                    if raw_bass > avg_bass * 1.5 && now.duration_since(last_beat) > min_beat_interval {
+                        last_beat = now;
+                        if beat_times.len() >= 8 { beat_times.pop_front(); }
+                        beat_times.push_back(now);
+
+                        // Need at least 4 beats to calculate a stable average BPM
+                        if beat_times.len() >= 4 {
+                            let mut total_duration = 0.0;
+                            for i in 1..beat_times.len() {
+                                total_duration += beat_times[i].duration_since(beat_times[i-1]).as_secs_f32();
+                            }
+                            let avg_interval = total_duration / (beat_times.len() - 1) as f32;
+                            let current_bpm = 60.0 / avg_interval;
+                            
+                            // Cap extreme values to prevent erratic framerate jumps
+                            if current_bpm > 60.0 && current_bpm < 220.0 {
+                                store_bpm(current_bpm);
+                            }
+                        }
+                    }
+                    // --- END BEAT DETECTION ---
+
                     let new_bass = if raw_bass > old_bass { raw_bass } else { old_bass * cfg.smoothing_old + raw_bass * cfg.smoothing_new };
                     store_bass(new_bass);
 
