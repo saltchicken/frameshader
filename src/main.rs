@@ -265,6 +265,7 @@ fn main() {
         ("GlitchSort", include_str!("../shaders/frag/glitch_sort.frag")),
         ("Vortex", include_str!("../shaders/frag/vortex.frag")),
         ("Topography", include_str!("../shaders/frag/topography.frag")),
+        ("Comic", include_str!("../shaders/frag/comic.frag")),
     ];
 
     let mut shader_programs = Vec::new();
@@ -347,24 +348,6 @@ fn main() {
     "treble_norm_factor": 20.0,
     "volume_norm_factor": 100.0
   }
-
-  // ==========================================
-  // COMMENTED OUT EXAMPLES
-  // ==========================================
-
-  /*
-  // VHS Glitch Mode
-  "mode": "VHS",
-  "playback_fps": 30.0,
-  "sensitivity": 1.5,
-  */
-
-  /*
-  // Halftone Dot Mode
-  "mode": "Halftone",
-  "playback_fps": 30.0,
-  "sensitivity": 1.0,
-  */
 }"#;
         fs::write(config_path, default_config_str).unwrap();
     }
