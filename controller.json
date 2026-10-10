@@ -28,9 +28,13 @@
     "bass_bin_end": 3,
     "mid_bin_start": 6,
     "mid_bin_end": 22,
+    "treble_bin_start": 23,
+    "treble_bin_end": 100,
     "smoothing_old": 0.7,
     "smoothing_new": 0.3,
     "bass_norm_factor": 75.0,
-    "mid_norm_factor": 74.0
+    "mid_norm_factor": 74.0,
+    "treble_norm_factor": 500.0,
+    "volume_norm_factor": 500.0
   }
 }

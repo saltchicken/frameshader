@@ -20,12 +20,24 @@ const AUDIO_BUFFER_SIZE: usize = 512;
 
 static BASS_VAL: AtomicU32 = AtomicU32::new(0);
 static MID_VAL: AtomicU32 = AtomicU32::new(0);
+static TREBLE_VAL: AtomicU32 = AtomicU32::new(0);
+static VOLUME_VAL: AtomicU32 = AtomicU32::new(0);
+static PEAK_FREQ_VAL: AtomicU32 = AtomicU32::new(0);
 
 fn store_bass(val: f32) { BASS_VAL.store(val.to_bits(), Ordering::Relaxed); }
 fn get_bass() -> f32 { f32::from_bits(BASS_VAL.load(Ordering::Relaxed)) }
 
 fn store_mid(val: f32) { MID_VAL.store(val.to_bits(), Ordering::Relaxed); }
 fn get_mid() -> f32 { f32::from_bits(MID_VAL.load(Ordering::Relaxed)) }
+
+fn store_treble(val: f32) { TREBLE_VAL.store(val.to_bits(), Ordering::Relaxed); }
+fn get_treble() -> f32 { f32::from_bits(TREBLE_VAL.load(Ordering::Relaxed)) }
+
+fn store_volume(val: f32) { VOLUME_VAL.store(val.to_bits(), Ordering::Relaxed); }
+fn get_volume() -> f32 { f32::from_bits(VOLUME_VAL.load(Ordering::Relaxed)) }
+
+fn store_peak_freq(val: f32) { PEAK_FREQ_VAL.store(val.to_bits(), Ordering::Relaxed); }
+fn get_peak_freq() -> f32 { f32::from_bits(PEAK_FREQ_VAL.load(Ordering::Relaxed)) }
 
 
 // 1. Define our JSON configuration structure
@@ -36,10 +48,14 @@ struct AudioConfig {
     bass_bin_end: usize,
     mid_bin_start: usize,
     mid_bin_end: usize,
+    treble_bin_start: usize,
+    treble_bin_end: usize,
     smoothing_old: f32,
     smoothing_new: f32,
     bass_norm_factor: f32,
     mid_norm_factor: f32,
+    treble_norm_factor: f32,
+    volume_norm_factor: f32,
 }
 
 impl Default for AudioConfig {
@@ -49,10 +65,14 @@ impl Default for AudioConfig {
             bass_bin_end: 3,
             mid_bin_start: 6,
             mid_bin_end: 22,
+            treble_bin_start: 23,
+            treble_bin_end: 100,
             smoothing_old: 0.7,
             smoothing_new: 0.3,
             bass_norm_factor: 6.0,
             mid_norm_factor: 34.0,
+            treble_norm_factor: 20.0,
+            volume_norm_factor: 100.0,
         }
     }
 }
@@ -133,6 +153,9 @@ struct ShaderProgram {
     loc_flicker_speed: i32,
     loc_audio_bass: i32,
     loc_audio_mid: i32,
+    loc_audio_treble: i32,
+    loc_audio_volume: i32,
+    loc_audio_peak_freq: i32,
     loc_crop: i32,
 }
 
@@ -170,7 +193,6 @@ fn main() {
     let cam_height = cam.get(videoio::CAP_PROP_FRAME_HEIGHT).unwrap() as i32;
     let fps = cam.get(videoio::CAP_PROP_FPS).unwrap();
     
-    // Warning fix: Re-added print statement
     println!("Input opened successfully at {}x{} ({} fps)", cam_width, cam_height, fps);
 
     let vertices: [f32; 20] = [
@@ -265,6 +287,9 @@ fn main() {
                 loc_flicker_speed: gl::GetUniformLocation(id, c"flicker_speed".as_ptr()),
                 loc_audio_bass: gl::GetUniformLocation(id, c"audio_bass".as_ptr()),
                 loc_audio_mid: gl::GetUniformLocation(id, c"audio_mid".as_ptr()),
+                loc_audio_treble: gl::GetUniformLocation(id, c"audio_treble".as_ptr()),
+                loc_audio_volume: gl::GetUniformLocation(id, c"audio_volume".as_ptr()),
+                loc_audio_peak_freq: gl::GetUniformLocation(id, c"audio_peak_freq".as_ptr()),
                 loc_crop: gl::GetUniformLocation(id, c"crop".as_ptr()),
             });
         }
@@ -313,10 +338,14 @@ fn main() {
     "bass_bin_end": 3,
     "mid_bin_start": 6,
     "mid_bin_end": 22,
+    "treble_bin_start": 23,
+    "treble_bin_end": 100,
     "smoothing_old": 0.7,
     "smoothing_new": 0.3,
     "bass_norm_factor": 6.0,
-    "mid_norm_factor": 34.0
+    "mid_norm_factor": 34.0,
+    "treble_norm_factor": 20.0,
+    "volume_norm_factor": 100.0
   }
 
   // ==========================================
@@ -497,6 +526,9 @@ fn main() {
             // Live Audio Uniforms
             if prog.loc_audio_bass != -1 { gl::Uniform1f(prog.loc_audio_bass, get_bass()); }
             if prog.loc_audio_mid != -1 { gl::Uniform1f(prog.loc_audio_mid, get_mid()); }
+            if prog.loc_audio_treble != -1 { gl::Uniform1f(prog.loc_audio_treble, get_treble()); }
+            if prog.loc_audio_volume != -1 { gl::Uniform1f(prog.loc_audio_volume, get_volume()); }
+            if prog.loc_audio_peak_freq != -1 { gl::Uniform1f(prog.loc_audio_peak_freq, get_peak_freq()); }
 
             gl::BindVertexArray(vao);
             gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
@@ -589,6 +621,7 @@ where
     T: cpal::Sample + cpal::SizedSample,
     f32: cpal::FromSample<T>,
 {
+    let sample_rate = config.sample_rate.0 as f32;
     let mut planner = FftPlanner::new();
     let fft = planner.plan_fft_forward(AUDIO_BUFFER_SIZE);
     let mut buffer = vec![0.0f32; AUDIO_BUFFER_SIZE];
@@ -611,11 +644,30 @@ where
                     
                     fft.process(&mut complex_buffer);
 
+                    let mut volume = 0.0;
+                    let mut max_amp = 0.0;
+                    let mut peak_bin = 0;
+                    
+                    // Analyze up to Nyquist limit for volume and peak freq
+                    for i in 0..(AUDIO_BUFFER_SIZE / 2) {
+                        let amp = complex_buffer[i].norm();
+                        volume += amp;
+                        if amp > max_amp {
+                            max_amp = amp;
+                            peak_bin = i;
+                        }
+                    }
+
                     let mut bass = 0.0;
                     for i in cfg.bass_bin_start..=cfg.bass_bin_end { bass += complex_buffer[i].norm(); }
                     
                     let mut mid = 0.0;
                     for i in cfg.mid_bin_start..=cfg.mid_bin_end { mid += complex_buffer[i].norm(); }
+
+                    let mut treble = 0.0;
+                    for i in cfg.treble_bin_start..=cfg.treble_bin_end { 
+                        if i < complex_buffer.len() { treble += complex_buffer[i].norm(); }
+                    }
 
                     let old_bass = get_bass();
                     let raw_bass = bass / cfg.bass_norm_factor;
@@ -626,6 +678,19 @@ where
                     let raw_mid = mid / cfg.mid_norm_factor;
                     let new_mid = if raw_mid > old_mid { raw_mid } else { old_mid * cfg.smoothing_old + raw_mid * cfg.smoothing_new };
                     store_mid(new_mid);
+
+                    let old_treble = get_treble();
+                    let raw_treble = treble / cfg.treble_norm_factor;
+                    let new_treble = if raw_treble > old_treble { raw_treble } else { old_treble * cfg.smoothing_old + raw_treble * cfg.smoothing_new };
+                    store_treble(new_treble);
+
+                    let old_volume = get_volume();
+                    let raw_volume = volume / cfg.volume_norm_factor;
+                    let new_volume = if raw_volume > old_volume { raw_volume } else { old_volume * cfg.smoothing_old + raw_volume * cfg.smoothing_new };
+                    store_volume(new_volume);
+
+                    let peak_freq = (peak_bin as f32 * sample_rate) / AUDIO_BUFFER_SIZE as f32;
+                    store_peak_freq(peak_freq);
 
                     idx = 0;
                 }
