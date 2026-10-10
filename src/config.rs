@@ -72,6 +72,7 @@ pub struct PipelineStage {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)]
 pub struct ShaderConfig {
+    pub video_input: Option<String>,
     pub pipeline: Vec<PipelineStage>,
     pub globals: HashMap<String, f32>,
     pub crop: CropConfig,
@@ -88,6 +89,7 @@ impl Default for ShaderConfig {
         };
 
         Self {
+            video_input: None,
             pipeline: vec![default_stage],
             globals: HashMap::new(),
             crop: CropConfig::default(),

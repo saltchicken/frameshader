@@ -56,6 +56,43 @@ fn get_shader_index(target_name: &str, defs: &[ShaderDef]) -> usize {
         .unwrap_or(0) 
 }
 
+fn init_camera(input: Option<&str>) -> (videoio::VideoCapture, bool, bool, i32, i32, f64) {
+    let mut is_file = false;
+    let mut has_camera = true;
+    
+    let cam = match input {
+        Some(inp) if !inp.is_empty() => {
+            if let Ok(cam_index) = inp.parse::<i32>() {
+                videoio::VideoCapture::new(cam_index, videoio::CAP_ANY)
+                    .unwrap_or_else(|_| videoio::VideoCapture::default().unwrap())
+            } else {
+                is_file = true;
+                videoio::VideoCapture::from_file(inp, videoio::CAP_ANY)
+                    .unwrap_or_else(|_| videoio::VideoCapture::default().unwrap())
+            }
+        },
+        _ => {
+            videoio::VideoCapture::new(0, videoio::CAP_ANY)
+                .unwrap_or_else(|_| videoio::VideoCapture::default().unwrap())
+        }
+    };
+
+    if !cam.is_opened().unwrap_or(false) {
+        eprintln!("Warning: No input feed available. Running in shader-only mode.");
+        has_camera = false;
+    }
+
+    let width = if has_camera { cam.get(videoio::CAP_PROP_FRAME_WIDTH).unwrap_or(1280.0) as i32 } else { 1280 };
+    let height = if has_camera { cam.get(videoio::CAP_PROP_FRAME_HEIGHT).unwrap_or(720.0) as i32 } else { 720 };
+    let fps = if has_camera { cam.get(videoio::CAP_PROP_FPS).unwrap_or(30.0) } else { 30.0 };
+
+    if has_camera {
+        println!("Input opened successfully at {}x{} ({} fps)", width, height, fps);
+    }
+
+    (cam, is_file, has_camera, width, height, fps)
+}
+
 fn main() {
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
     glfw.window_hint(glfw::WindowHint::ContextVersion(4, 6));
@@ -71,36 +108,67 @@ fn main() {
     gl::load_with(|s| window.get_proc_address(s) as *const _);
 
     let args: Vec<String> = env::args().collect();
-    let mut is_file = false;
-    let mut has_camera = true;
+    let config_path = "controller.json";
 
-    let mut cam = if args.len() > 1 {
-        let input = &args[1];
-        if let Ok(cam_index) = input.parse::<i32>() {
-            videoio::VideoCapture::new(cam_index, videoio::CAP_ANY)
-                .unwrap_or_else(|_| videoio::VideoCapture::default().unwrap())
-        } else {
-            is_file = true;
-            videoio::VideoCapture::from_file(input, videoio::CAP_ANY)
-                .unwrap_or_else(|_| videoio::VideoCapture::default().unwrap())
-        }
+    // Setup default config if it doesn't exist (updated with video_input)
+    if !Path::new(config_path).exists() {
+        let default_config_str = r#"{
+  "video_input": null,
+  "pipeline": [
+    {
+      "name": "filters/edge",
+      "params": {
+        "sensitivity": 1.2
+      }
+    },
+    {
+      "name": "warp/vortex",
+      "params": {
+        "sensitivity": 1.5,
+        "vortex_speed": 1.5,
+        "vortex_arms": 4.0,
+        "vortex_spin": 0.4,
+        "vortex_center_size": 0.05,
+        "vortex_fov": 0.5,
+        "vortex_color_separation": 0.015,
+        "vortex_strobe_size": 0.4
+      }
+    }
+  ],
+  "globals": {
+    "rain_speed": 0.4,
+    "tail_length": 0.3,
+    "flicker_speed": 15.0,
+    "resonance_ripples": 30.0,
+    "font_width": 8.0,
+    "font_height": 16.0,
+    "num_chars": 10.0
+  },
+  "crop": { "left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0 },
+  "playback_fps": 30.0,
+  "bpm_multiplier": 15.0,
+  "audio": {
+    "bass_bin_start": 1, "bass_bin_end": 3,
+    "mid_bin_start": 6, "mid_bin_end": 22,
+    "treble_bin_start": 23, "treble_bin_end": 100,
+    "smoothing_old": 0.7, "smoothing_new": 0.3,
+    "bass_norm_factor": 6.0, "mid_norm_factor": 34.0,
+    "treble_norm_factor": 20.0, "volume_norm_factor": 100.0
+  }
+}"#;
+        fs::write(config_path, default_config_str).unwrap();
+    }
+
+    let mut current_config = load_config(config_path);
+
+    let initial_input = if args.len() > 1 {
+        Some(args[1].clone())
     } else {
-        videoio::VideoCapture::new(0, videoio::CAP_ANY)
-            .unwrap_or_else(|_| videoio::VideoCapture::default().unwrap())
+        current_config.video_input.clone()
     };
 
-    if !cam.is_opened().unwrap_or(false) {
-        eprintln!("Warning: No input feed available. Running in shader-only mode.");
-        has_camera = false;
-    }
-
-    let cam_width = if has_camera { cam.get(videoio::CAP_PROP_FRAME_WIDTH).unwrap_or(1280.0) as i32 } else { 1280 };
-    let cam_height = if has_camera { cam.get(videoio::CAP_PROP_FRAME_HEIGHT).unwrap_or(720.0) as i32 } else { 720 };
-    let fps = if has_camera { cam.get(videoio::CAP_PROP_FPS).unwrap_or(30.0) } else { 30.0 };
-    
-    if has_camera {
-        println!("Input opened successfully at {}x{} ({} fps)", cam_width, cam_height, fps);
-    }
+    let (mut cam, mut is_file, mut has_camera, mut cam_width, mut cam_height, mut _fps) = 
+        init_camera(initial_input.as_deref());
 
     let vertices: [f32; 20] = [
          1.0,  1.0, 0.0,   1.0, 1.0, // Top Right
@@ -176,63 +244,13 @@ fn main() {
 
     let mut frame = opencv::core::Mat::default();
 
-    let config_path = "controller.json";
     let (tx, rx) = mpsc::channel();
-    
     let mut debouncer = new_debouncer(Duration::from_millis(150), tx)
         .expect("Failed to initialize file watcher debouncer");
-    
-    if !Path::new(config_path).exists() {
-        let default_config_str = r#"{
-  "pipeline": [
-    {
-      "name": "filters/edge",
-      "params": {
-        "sensitivity": 1.2
-      }
-    },
-    {
-      "name": "warp/vortex",
-      "params": {
-        "sensitivity": 1.5,
-        "vortex_speed": 1.5,
-        "vortex_arms": 4.0,
-        "vortex_spin": 0.4,
-        "vortex_center_size": 0.05,
-        "vortex_fov": 0.5,
-        "vortex_color_separation": 0.015,
-        "vortex_strobe_size": 0.4
-      }
-    }
-  ],
-  "globals": {
-    "rain_speed": 0.4,
-    "tail_length": 0.3,
-    "flicker_speed": 15.0,
-    "resonance_ripples": 30.0,
-    "font_width": 8.0,
-    "font_height": 16.0,
-    "num_chars": 10.0
-  },
-  "crop": { "left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0 },
-  "playback_fps": 30.0,
-  "bpm_multiplier": 15.0,
-  "audio": {
-    "bass_bin_start": 1, "bass_bin_end": 3,
-    "mid_bin_start": 6, "mid_bin_end": 22,
-    "treble_bin_start": 23, "treble_bin_end": 100,
-    "smoothing_old": 0.7, "smoothing_new": 0.3,
-    "bass_norm_factor": 6.0, "mid_norm_factor": 34.0,
-    "treble_norm_factor": 20.0, "volume_norm_factor": 100.0
-  }
-}"#;
-        fs::write(config_path, default_config_str).unwrap();
-    }
     
     debouncer.watcher().watch(Path::new("."), RecursiveMode::NonRecursive).unwrap();
     debouncer.watcher().watch(Path::new("shaders/frag"), RecursiveMode::Recursive).unwrap();
 
-    let mut current_config = load_config(config_path);
     let shared_audio_config = Arc::new(RwLock::new(current_config.audio.clone()));
     let audio_state = Arc::new(AudioState::default());
 
@@ -306,7 +324,31 @@ fn main() {
         }
 
         if config_changed {
-            current_config = load_config(config_path);
+            let new_config = load_config(config_path);
+            
+            if new_config.video_input != current_config.video_input {
+                println!("Video input changing to: {:?}", new_config.video_input);
+                
+                let (new_cam, new_is_file, new_has_cam, new_w, new_h, _) = 
+                    init_camera(new_config.video_input.as_deref());
+                
+                cam = new_cam;
+                is_file = new_is_file;
+                has_camera = new_has_cam;
+                cam_width = new_w;
+                cam_height = new_h;
+
+                unsafe {
+                    gl::BindTexture(gl::TEXTURE_2D, video_texture);
+                    gl::TexImage2D(
+                        gl::TEXTURE_2D, 0, gl::RGB as i32, 
+                        cam_width, cam_height, 
+                        0, gl::BGR, gl::UNSIGNED_BYTE, ptr::null()
+                    );
+                }
+            }
+
+            current_config = new_config;
             
             if let Ok(mut lock) = shared_audio_config.write() {
                 *lock = current_config.audio.clone();
@@ -410,11 +452,9 @@ fn main() {
                         gl::ActiveTexture(gl::TEXTURE1);
                         gl::BindTexture(gl::TEXTURE_2D, font_texture);
                         
-                        // --- DYNAMIC UNIFORM DISPATCHER ---
                         for (name, &loc) in &prog.uniforms {
                             let param_str = name.as_str();
                             match param_str {
-                                // 1. Built-in system textures and variables
                                 "videoTexture" => gl::Uniform1i(loc, 0),
                                 "fontAtlas" => gl::Uniform1i(loc, 1),
                                 "resolution" => gl::Uniform2f(loc, fb_width as f32, fb_height as f32),
@@ -442,16 +482,13 @@ fn main() {
                                     gl::Uniform4f(loc, c_l, c_r, c_t, c_b);
                                 },
                                 
-                                // 2. Audio variables
                                 "audio_bass" => gl::Uniform1f(loc, audio_state.get_bass()),
                                 "audio_mid" => gl::Uniform1f(loc, audio_state.get_mid()),
                                 "audio_treble" => gl::Uniform1f(loc, audio_state.get_treble()),
                                 "audio_volume" => gl::Uniform1f(loc, audio_state.get_volume()),
                                 "audio_peak_freq" => gl::Uniform1f(loc, audio_state.get_peak_freq()),
                                 
-                                // 3. Dynamic custom parameters
                                 custom_param => {
-                                    // Try local stage param first, fallback to global, then default to 0.0
                                     if let Some(&val) = stage.params.get(custom_param) {
                                         gl::Uniform1f(loc, val);
                                     } else if let Some(&val) = current_config.globals.get(custom_param) {

@@ -1,14 +1,15 @@
 {
+  "video_input": null,
   "pipeline": [
     // --- STAGE 1: BASE EFFECTS ---
     // Uncomment 'flux' instead of 'matrix' to get the flickering tail effect
-    // {
-    //   "name": "ascii/matrix/flux",
-    //   "params": {
-    //     "sensitivity": 1.5,
-    //     "flicker_speed": 15.0
-    //   }
-    // },
+    {
+      "name": "ascii/matrix/matrix",
+      "params": {
+        "sensitivity": 1.5,
+        "flicker_speed": 15.0
+      }
+    },
     // {
     //   "name": "ascii/matrix/color",
     //   "params": {
@@ -36,14 +37,14 @@
     //     "vortex_strobe_size": 0.4
     //   }
     // },
-    {
-      "name": "warp/kaleido",
-      "params": {
-        "sensitivity": 1.2,
-        "segments": 40.0,
-        "spin_speed": -0.1
-      }
-    },
+    // {
+    //   "name": "warp/kaleido",
+    //   "params": {
+    //     "sensitivity": 1.2,
+    //     "segments": 40.0,
+    //     "spin_speed": -0.1
+    //   }
+    // },
     // {
     //   "name": "filters/edge",
     //   "params": {
@@ -63,17 +64,17 @@
   // Globals are fallback uniforms if a stage doesn't define them in 'params'
   "globals": {
     "rain_speed": 0.2,       // Used by all matrix shaders
-    "tail_length": 1.0,      // Used by all matrix shaders
+    "tail_length": 1.5,      // Used by all matrix shaders
     // "flicker_speed": 10.0,    // Only used by ascii/matrix/flux
     "font_width": 2.0,
     "font_height": 4.0,
-    "num_chars": 10.0
+    "num_chars": 20.0
   },
 
   // Adjust to hide messy video edges (0.0 to 0.49)
   "crop": {
     "left": 0.0,
-    "right": 0.0,
+    "right": 50.0,
     "top": 0.0,
     "bottom": 0.0
   },
