@@ -17,7 +17,7 @@ uniform float sensitivity = 2.0; // NEW: Controls brightness reaction
 uniform float audio_bass;
 uniform float audio_mid;
 
-const vec3 HEAD_COLOR = vec3(0.7, 1.0, 0.7);
+const vec3 HEAD_COLOR = vec3(0.0, 1.0, 0.4);
 const vec3 TAIL_COLOR = vec3(0.0, 1.0, 0.1);
 
 float random(vec2 st) {
