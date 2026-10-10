@@ -9,12 +9,12 @@
     //     "flicker_speed": 15.0
     //   }
     // },
-    {
-      "name": "ascii/matrix/matrix",
-      "params": {
-        "sensitivity": 2.2
-      }
-    },
+    // {
+    //   "name": "ascii/matrix/color",
+    //   "params": {
+    //     "sensitivity": 2.2
+    //   }
+    // },
     // {
     //   "name": "geo/topography",
     //   "params": {
@@ -36,12 +36,20 @@
     //     "vortex_strobe_size": 0.4
     //   }
     // },
+    {
+      "name": "warp/kaleido",
+      "params": {
+        "sensitivity": 1.2,
+        "segments": 40.0,
+        "spin_speed": -0.1
+      }
+    },
     // {
     //   "name": "filters/edge",
     //   "params": {
     //     "sensitivity": 0.2
     //   }
-    // }
+    // },
     // {
     //   "name": "warp/resonance",
     //   "params": {
