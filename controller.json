@@ -1,6 +1,6 @@
 {
   // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "halftone", "Prism", "GlitchSort", "Vortex", "Topography", "Resonance"
-  "mode": "Vortex",
+  "mode": "Resonance",
 
   "crop": {
     "left": 0.0,

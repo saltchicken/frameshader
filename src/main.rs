@@ -136,19 +136,19 @@ fn main() {
         ShaderDef { name: "Color".into(), file_name: "ascii/matrix/color.frag".into(), static_src: include_str!("../shaders/frag/ascii/matrix/color.frag"), program: None },
         // ShaderDef { name: "Flux".into(), file_name: "ascii/matrix/flux.frag".into(), static_src: include_str!("../shaders/frag/ascii/matrix/flux.frag"), program: None },
         // ShaderDef { name: "CRT".into(), file_name: "archived/crt.frag".into(), static_src: include_str!("../shaders/frag/archived/crt.frag"), program: None },
-        // ShaderDef { name: "Edge".into(), file_name: "edge.frag".into(), static_src: include_str!("../shaders/frag/edge.frag"), program: None },
+        // ShaderDef { name: "Edge".into(), file_name: "filters/edge.frag".into(), static_src: include_str!("../shaders/frag/filters/edge.frag"), program: None },
         // ShaderDef { name: "VHS".into(), file_name: "archived/vhs.frag".into(), static_src: include_str!("../shaders/frag/archived/vhs.frag"), program: None },
         // ShaderDef { name: "Halftone".into(), file_name: "archived/halftone.frag".into(), static_src: include_str!("../shaders/frag/archived/halftone.frag"), program: None },
         // ShaderDef { name: "Prism".into(), file_name: "archived/prism.frag".into(), static_src: include_str!("../shaders/frag/archived/prism.frag"), program: None },
         // ShaderDef { name: "GlitchSort".into(), file_name: "archived/glitch_sort.frag".into(), static_src: include_str!("../shaders/frag/archived/glitch_sort.frag"), program: None },
-        ShaderDef { name: "Vortex".into(), file_name: "vortex.frag".into(), static_src: include_str!("../shaders/frag/vortex.frag"), program: None },
-        // ShaderDef { name: "Topography".into(), file_name: "topography.frag".into(), static_src: include_str!("../shaders/frag/topography.frag"), program: None },
+        ShaderDef { name: "Vortex".into(), file_name: "warp/vortex.frag".into(), static_src: include_str!("../shaders/frag/warp/vortex.frag"), program: None },
+        // ShaderDef { name: "Topography".into(), file_name: "geo/topography.frag".into(), static_src: include_str!("../shaders/frag/geo/topography.frag"), program: None },
         // ShaderDef { name: "Comic".into(), file_name: "archived/comic.frag".into(), static_src: include_str!("../shaders/frag/archived/comic.frag"), program: None },
         // ShaderDef { name: "Thermal".into(), file_name: "archived/thermal.frag".into(), static_src: include_str!("../shaders/frag/archived/thermal.frag"), program: None },
         // ShaderDef { name: "Paint".into(), file_name: "archived/paint.frag".into(), static_src: include_str!("../shaders/frag/archived/paint.frag"), program: None },
         // ShaderDef { name: "NightVision".into(), file_name: "archived/nightvision.frag".into(), static_src: include_str!("../shaders/frag/archived/nightvision.frag"), program: None },
         // ShaderDef { name: "Dither".into(), file_name: "archived/dither.frag".into(), static_src: include_str!("../shaders/frag/archived/dither.frag"), program: None },
-        // ShaderDef { name: "Resonance".into(), file_name: "resonance.frag".into(), static_src: include_str!("../shaders/frag/resonance.frag"), program: None },
+        ShaderDef { name: "Resonance".into(), file_name: "warp/resonance.frag".into(), static_src: include_str!("../shaders/frag/warp/resonance.frag"), program: None },
     ];
 
     for def in &mut shader_defs {
@@ -232,7 +232,7 @@ fn main() {
     debouncer.watcher().watch(std::path::Path::new("."), RecursiveMode::NonRecursive)
         .expect("Failed to watch top level directory");
     
-    debouncer.watcher().watch(std::path::Path::new("shaders/frag"), RecursiveMode::NonRecursive)
+    debouncer.watcher().watch(std::path::Path::new("shaders/frag"), RecursiveMode::Recursive)
         .expect("Failed to watch shaders directory");
 
     let mut current_config = load_config(config_path);
