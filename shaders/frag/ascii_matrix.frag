@@ -50,7 +50,8 @@ void main()
     
     // ... (Section 4 for selecting a character is the same) ...
     float time_slice = floor(time * 5.0);
-    float charIndex = floor(random(charCoord.xy + time_slice) * numChars);
+    vec2 timeOffset = vec2(sin(time_slice * 12.34), cos(time_slice * 56.78)) * 100.0;
+    float charIndex = floor(random(charCoord.xy + timeOffset) * numChars);
 
     // --- MODIFIED FINAL COLOR CALCULATION ---
 

@@ -9,7 +9,7 @@ uniform sampler2D fontAtlas;    // Texture unit 1: The font atlas image
 uniform vec2 resolution;        // Resolution of the camera feed (e.g., 1920x1080)
 uniform vec2 charSize;          // Size of one character cell (e.g., 8x16 pixels)
 
-uniform float sensitivity = 1.0; // <-- ADD THIS SENSITIVITY UNIFORM
+uniform float sensitivity = 1.0; 
 
 uniform float numChars = 10.0;
 
@@ -19,7 +19,6 @@ uniform float audio_mid;
 
 void main()
 {
-    // ... (steps 1-3 are the same)
     vec2 characterGrid = resolution / charSize;
     vec2 charCoord = floor(TexCoord * characterGrid);
     vec2 videoUV = (charCoord + 0.5) / characterGrid;
@@ -33,9 +32,10 @@ void main()
 
     // 6. Select a character index, clamping the result to avoid errors
     float clampedBrightness = clamp(boostedBrightness, 0.0, 1.0);
-    float charIndex = floor(clampedBrightness * (numChars - 1.0));
+    
+    // NOTE: This relies on brightness, NOT random time slices!
+    float charIndex = floor(clampedBrightness * (numChars - 1.0)); 
 
-    // ... (the rest of the shader is the same)
     vec2 intraCharUV = fract(TexCoord * characterGrid);
     float atlasX = (charIndex + intraCharUV.x) / numChars;
     vec2 fontUV = vec2(atlasX, intraCharUV.y);

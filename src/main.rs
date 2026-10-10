@@ -58,9 +58,37 @@ impl Default for AudioConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(default)]
+struct CropConfig {
+    left: f32,
+    right: f32,
+    top: f32,
+    bottom: f32,
+}
+
+impl Default for CropConfig {
+    fn default() -> Self {
+        Self { left: 0.0, right: 0.0, top: 0.0, bottom: 0.0 }
+    }
+}
+
+impl CropConfig {
+    fn sanitize(&self) -> (f32, f32, f32, f32) {
+        fn clean(mut v: f32) -> f32 {
+            // Auto-correct whole numbers (e.g., 10 -> 0.1)
+            if v > 1.0 { v /= 100.0; }
+            // Ensure values never drop below 0 or crop more than half the screen (0.49)
+            v.clamp(0.0, 0.49) 
+        }
+        (clean(self.left), clean(self.right), clean(self.top), clean(self.bottom))
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)] // Allows partial JSON files (missing fields will use default)
 struct ShaderConfig {
     mode: String,
+    crop: CropConfig,
     font_width: f32,
     font_height: f32,
     num_chars: f32,
@@ -76,6 +104,7 @@ impl Default for ShaderConfig {
     fn default() -> Self {
         Self {
             mode: "Flux".to_string(),
+            crop: CropConfig::default(),
             font_width: 8.0,
             font_height: 16.0,
             num_chars: 10.0,
@@ -104,6 +133,7 @@ struct ShaderProgram {
     loc_flicker_speed: i32,
     loc_audio_bass: i32,
     loc_audio_mid: i32,
+    loc_crop: i32,
 }
 
 fn main() {
@@ -231,6 +261,7 @@ fn main() {
                 loc_flicker_speed: gl::GetUniformLocation(id, c"flicker_speed".as_ptr()),
                 loc_audio_bass: gl::GetUniformLocation(id, c"audio_bass".as_ptr()),
                 loc_audio_mid: gl::GetUniformLocation(id, c"audio_mid".as_ptr()),
+                loc_crop: gl::GetUniformLocation(id, c"crop".as_ptr()),
             });
         }
     }
@@ -251,6 +282,14 @@ fn main() {
         let default_config_str = r#"{
   // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "Halftone"
   "mode": "Flux",
+  
+  // Crop parameters (0.0 to 1.0 for percentage of edges to remove)
+  "crop": {
+    "left": 0.0,
+    "right": 0.0,
+    "top": 0.0,
+    "bottom": 0.0
+  },
   
   // Font Graphics Options
   "font_width": 8.0,
@@ -435,6 +474,17 @@ fn main() {
             if prog.loc_time != -1 { gl::Uniform1f(prog.loc_time, glfw.get_time() as f32); }
 
             // Live Config Uniforms
+            if prog.loc_crop != -1 {
+                let (c_l, c_r, c_t, c_b) = current_config.crop.sanitize();
+                gl::Uniform4f(
+                    prog.loc_crop,
+                    c_l,
+                    c_r,
+                    c_t,
+                    c_b
+                );
+            }
+            
             if prog.loc_sensitivity != -1 { gl::Uniform1f(prog.loc_sensitivity, current_config.sensitivity); }
             if prog.loc_rain_speed != -1 { gl::Uniform1f(prog.loc_rain_speed, current_config.rain_speed); }
             if prog.loc_tail_length != -1 { gl::Uniform1f(prog.loc_tail_length, current_config.tail_length); }

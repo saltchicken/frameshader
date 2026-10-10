@@ -1,6 +1,13 @@
 {
   // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "halftone"
-  "mode": "Flux",
+  "mode": "ASCII",
+
+  "crop": {
+    "left": 20.0,
+    "right": 20.0,
+    "top": 0.0,
+    "bottom": 0.0
+  },
   
   // Font Graphics Options
   "font_width": 4.0,
@@ -9,11 +16,11 @@
   
   // Live parameters
   "playback_fps": 60.0,
-  "sensitivity": 1.5,
+  "sensitivity": 2.5,
 
-  "rain_speed": 0.2,
+  "rain_speed": 0.5,
   "tail_length": 1.5,
-  "flicker_speed": 15.0,
+  "flicker_speed": 10.0,
 
   // Audio reactive parameters
   "audio": {
