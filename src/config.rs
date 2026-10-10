@@ -119,11 +119,42 @@ impl ShaderConfig {
 }
 
 pub fn load_config(path: &str) -> ShaderConfig {
-    if let Ok(content) = std::fs::read_to_string(path) {
+    let mut config = if let Ok(content) = std::fs::read_to_string(path) {
         match json5::from_str::<ShaderConfig>(&content) {
-            Ok(config) => return config,
-            Err(e) => eprintln!("Error parsing controller.json: {} - keeping previous state.", e),
+            Ok(config) => config,
+            Err(e) => {
+                eprintln!("Error parsing controller.json: {} - keeping previous state.", e);
+                ShaderConfig::default()
+            }
         }
+    } else {
+        ShaderConfig::default()
+    };
+
+    // Load separate preset files
+    let presets_dir = std::path::Path::new("presets");
+    if presets_dir.exists() && presets_dir.is_dir() {
+        if let Ok(entries) = std::fs::read_dir(presets_dir) {
+            for entry in entries.flatten() {
+                let file_path = entry.path();
+                if file_path.is_file() && file_path.extension().map_or(false, |ext| ext == "json") {
+                    if let Some(preset_name) = file_path.file_stem().and_then(|s| s.to_str()) {
+                        if let Ok(content) = std::fs::read_to_string(&file_path) {
+                            match json5::from_str::<Vec<PipelineStage>>(&content) {
+                                Ok(pipeline) => {
+                                    config.presets.insert(preset_name.to_string(), pipeline);
+                                }
+                                Err(e) => eprintln!("Error parsing preset {}: {}", file_path.display(), e),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        // Create the directory if it doesn't exist so the user knows where to put them
+        let _ = std::fs::create_dir("presets");
     }
-    ShaderConfig::default()
+
+    config
 }

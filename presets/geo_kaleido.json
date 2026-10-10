@@ -1,0 +1,15 @@
+[
+  {
+    "name": "warp/kaleido",
+    "params": {
+      "segments": 40.0,
+      "spin_speed": -0.1
+    }
+  },
+  {
+    "name": "geo/topography",
+    "params": {
+      "sensitivity": 1.0
+    }
+  }
+]

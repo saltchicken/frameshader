@@ -238,6 +238,12 @@ fn main() {
     debouncer.watcher().watch(Path::new("."), RecursiveMode::NonRecursive).unwrap();
     debouncer.watcher().watch(Path::new("shaders/frag"), RecursiveMode::Recursive).unwrap();
 
+    let presets_path = Path::new("presets");
+    if !presets_path.exists() {
+        let _ = fs::create_dir("presets");
+    }
+    let _ = debouncer.watcher().watch(presets_path, RecursiveMode::Recursive);
+
     let shared_audio_config = Arc::new(RwLock::new(current_config.audio.clone()));
     let audio_state = Arc::new(AudioState::default());
 
@@ -286,7 +292,7 @@ fn main() {
             match res {
                 Ok(events) => {
                     for event in events {
-                        if event.path.ends_with(config_path) {
+                        if event.path.ends_with(config_path) || event.path.components().any(|c| c.as_os_str() == "presets") {
                             config_changed = true;
                         }
                         
