@@ -7,6 +7,10 @@ uniform vec2 resolution;
 uniform float sensitivity;
 uniform float time;
 
+// --- AUDIO UNIFORMS ---
+uniform float audio_bass;
+uniform float audio_mid;
+
 void main() {
     vec2 texel = 1.0 / resolution;
     

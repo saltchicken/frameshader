@@ -17,6 +17,10 @@ uniform float tail_length = 0.3;
 uniform float flicker_speed = 15.0; // Controls how fast the tail characters change
 uniform float sensitivity = 1.5;    // How much the camera brightness affects the rain
 
+// --- AUDIO UNIFORMS ---
+uniform float audio_bass;
+uniform float audio_mid;
+
 // --- COLORS ---
 const vec3 HEAD_COLOR = vec3(0.8, 1.0, 0.8); // Bright white-green
 const vec3 TAIL_COLOR = vec3(0.0, 0.9, 0.1); // Classic green

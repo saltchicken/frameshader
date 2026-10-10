@@ -13,6 +13,10 @@ uniform float time;
 uniform float rain_speed = 0.3;   // Now a uniform
 uniform float tail_length = 0.25; // Now a uniform
 
+// --- AUDIO UNIFORMS ---
+uniform float audio_bass;
+uniform float audio_mid;
+
 float random(vec2 st) {
     return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }

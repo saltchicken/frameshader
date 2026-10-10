@@ -7,6 +7,10 @@ uniform vec2 resolution;
 uniform float time;
 uniform float sensitivity; // Reusing this to control RGB shift
 
+// --- AUDIO UNIFORMS ---
+uniform float audio_bass;
+uniform float audio_mid;
+
 // Creates the classic bulging screen effect
 vec2 curve(vec2 uv) {
     uv = (uv - 0.5) * 2.0;

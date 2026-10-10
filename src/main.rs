@@ -9,7 +9,54 @@ use std::time::{Duration, Instant};
 use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
 use serde::{Deserialize, Serialize};
 
+// Audio Dependencies
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use rustfft::{num_complex::Complex, FftPlanner};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, RwLock};
+
+// --- AUDIO GLOBALS ---
+const AUDIO_BUFFER_SIZE: usize = 512;
+
+static BASS_VAL: AtomicU32 = AtomicU32::new(0);
+static MID_VAL: AtomicU32 = AtomicU32::new(0);
+
+fn store_bass(val: f32) { BASS_VAL.store(val.to_bits(), Ordering::Relaxed); }
+fn get_bass() -> f32 { f32::from_bits(BASS_VAL.load(Ordering::Relaxed)) }
+
+fn store_mid(val: f32) { MID_VAL.store(val.to_bits(), Ordering::Relaxed); }
+fn get_mid() -> f32 { f32::from_bits(MID_VAL.load(Ordering::Relaxed)) }
+
+
 // 1. Define our JSON configuration structure
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(default)]
+struct AudioConfig {
+    bass_bin_start: usize,
+    bass_bin_end: usize,
+    mid_bin_start: usize,
+    mid_bin_end: usize,
+    smoothing_old: f32,
+    smoothing_new: f32,
+    bass_norm_factor: f32,
+    mid_norm_factor: f32,
+}
+
+impl Default for AudioConfig {
+    fn default() -> Self {
+        Self {
+            bass_bin_start: 1,
+            bass_bin_end: 3,
+            mid_bin_start: 6,
+            mid_bin_end: 22,
+            smoothing_old: 0.7,
+            smoothing_new: 0.3,
+            bass_norm_factor: 6.0,
+            mid_norm_factor: 34.0,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)] // Allows partial JSON files (missing fields will use default)
 struct ShaderConfig {
@@ -22,6 +69,7 @@ struct ShaderConfig {
     rain_speed: f32,
     tail_length: f32,
     flicker_speed: f32,
+    audio: AudioConfig,
 }
 
 impl Default for ShaderConfig {
@@ -36,6 +84,7 @@ impl Default for ShaderConfig {
             rain_speed: 0.4,
             tail_length: 0.3,
             flicker_speed: 15.0,
+            audio: AudioConfig::default(),
         }
     }
 }
@@ -53,6 +102,8 @@ struct ShaderProgram {
     loc_rain_speed: i32,
     loc_tail_length: i32,
     loc_flicker_speed: i32,
+    loc_audio_bass: i32,
+    loc_audio_mid: i32,
 }
 
 fn main() {
@@ -174,6 +225,8 @@ fn main() {
                 loc_rain_speed: gl::GetUniformLocation(id, c"rain_speed".as_ptr()),
                 loc_tail_length: gl::GetUniformLocation(id, c"tail_length".as_ptr()),
                 loc_flicker_speed: gl::GetUniformLocation(id, c"flicker_speed".as_ptr()),
+                loc_audio_bass: gl::GetUniformLocation(id, c"audio_bass".as_ptr()),
+                loc_audio_mid: gl::GetUniformLocation(id, c"audio_mid".as_ptr()),
             });
         }
     }
@@ -205,7 +258,19 @@ fn main() {
   "sensitivity": 1.5,
   "rain_speed": 0.4,
   "tail_length": 0.3,
-  "flicker_speed": 15.0
+  "flicker_speed": 15.0,
+  
+  // Audio reactive parameters
+  "audio": {
+    "bass_bin_start": 1,
+    "bass_bin_end": 3,
+    "mid_bin_start": 6,
+    "mid_bin_end": 22,
+    "smoothing_old": 0.7,
+    "smoothing_new": 0.3,
+    "bass_norm_factor": 6.0,
+    "mid_norm_factor": 34.0
+  }
 
   // ==========================================
   // COMMENTED OUT EXAMPLES
@@ -246,6 +311,11 @@ fn main() {
     let mut current_config = load_config(config_path);
     let mut current_mode = get_mode_index(&current_config.mode, &fragment_sources);
     
+    // Initialize Audio
+    let shared_audio_config = Arc::new(RwLock::new(current_config.audio.clone()));
+    let _audio_stream = build_audio_stream(Arc::clone(&shared_audio_config))
+        .expect("Failed to start audio stream");
+    
     println!("Watching controller.json for live updates...");
 
     let mut last_video_update = Instant::now();
@@ -278,6 +348,12 @@ fn main() {
         if config_changed {
             current_config = load_config(config_path);
             current_mode = get_mode_index(&current_config.mode, &fragment_sources);
+            
+            // Send new audio config to the audio thread
+            if let Ok(mut lock) = shared_audio_config.write() {
+                *lock = current_config.audio.clone();
+            }
+            
             println!("Config reloaded: Active Mode [{}], FPS: [{}]", current_config.mode, current_config.playback_fps);
         }
 
@@ -328,10 +404,9 @@ fn main() {
             if prog.loc_font_atlas != -1 { gl::Uniform1i(prog.loc_font_atlas, 1); }
             if prog.loc_resolution != -1 { gl::Uniform2f(prog.loc_resolution, cam_width as f32, cam_height as f32); }
             
-            // --- UPDATED: Use variables from config ---
+            // Use variables from config
             if prog.loc_char_size != -1 { gl::Uniform2f(prog.loc_char_size, current_config.font_width, current_config.font_height); }
             if prog.loc_num_chars != -1 { gl::Uniform1f(prog.loc_num_chars, current_config.num_chars); }
-            // ------------------------------------------
 
             if prog.loc_time != -1 { gl::Uniform1f(prog.loc_time, glfw.get_time() as f32); }
 
@@ -340,6 +415,10 @@ fn main() {
             if prog.loc_rain_speed != -1 { gl::Uniform1f(prog.loc_rain_speed, current_config.rain_speed); }
             if prog.loc_tail_length != -1 { gl::Uniform1f(prog.loc_tail_length, current_config.tail_length); }
             if prog.loc_flicker_speed != -1 { gl::Uniform1f(prog.loc_flicker_speed, current_config.flicker_speed); }
+            
+            // Live Audio Uniforms
+            if prog.loc_audio_bass != -1 { gl::Uniform1f(prog.loc_audio_bass, get_bass()); }
+            if prog.loc_audio_mid != -1 { gl::Uniform1f(prog.loc_audio_mid, get_mid()); }
 
             gl::BindVertexArray(vao);
             gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
@@ -404,4 +483,80 @@ unsafe fn check_shader_compile(shader: u32, shader_type: &str) {
         gl::GetShaderInfoLog(shader, len, ptr::null_mut(), buffer.as_mut_ptr() as *mut i8);
         panic!("{} Shader Compilation Error:\n{}", shader_type, String::from_utf8_lossy(&buffer));
     }
+}
+
+// --- Audio Functions ---
+fn build_audio_stream(shared_config: Arc<RwLock<AudioConfig>>) -> Result<cpal::Stream, anyhow::Error> {
+    let host = cpal::default_host();
+    let device = host.default_input_device().ok_or_else(|| anyhow::anyhow!("No input device found"))?;
+    let config = device.default_input_config()?;
+    
+    println!("Audio Client initialized.");
+
+    let stream = match config.sample_format() {
+        cpal::SampleFormat::F32 => run_stream::<f32>(&device, &config.into(), shared_config),
+        cpal::SampleFormat::I16 => run_stream::<i16>(&device, &config.into(), shared_config),
+        _ => anyhow::bail!("Unsupported sample format"),
+    }?;
+    
+    Ok(stream)
+}
+
+fn run_stream<T>(
+    device: &cpal::Device,
+    config: &cpal::StreamConfig,
+    shared_config: Arc<RwLock<AudioConfig>>,
+) -> Result<cpal::Stream, anyhow::Error>
+where
+    T: cpal::Sample + cpal::SizedSample,
+    f32: cpal::FromSample<T>,
+{
+    let mut planner = FftPlanner::new();
+    let fft = planner.plan_fft_forward(AUDIO_BUFFER_SIZE);
+    let mut buffer = vec![0.0f32; AUDIO_BUFFER_SIZE];
+    let mut idx = 0;
+
+    let stream = device.build_input_stream(
+        config,
+        move |data: &[T], _: &_| {
+            let cfg = shared_config.read().unwrap().clone();
+
+            for sample in data {
+                buffer[idx] = sample.to_sample::<f32>();
+                idx += 1;
+                
+                if idx >= AUDIO_BUFFER_SIZE {
+                    let mut complex_buffer: Vec<Complex<f32>> = buffer
+                        .iter()
+                        .map(|&v| Complex { re: v, im: 0.0 })
+                        .collect();
+                    
+                    fft.process(&mut complex_buffer);
+
+                    let mut bass = 0.0;
+                    for i in cfg.bass_bin_start..=cfg.bass_bin_end { bass += complex_buffer[i].norm(); }
+                    
+                    let mut mid = 0.0;
+                    for i in cfg.mid_bin_start..=cfg.mid_bin_end { mid += complex_buffer[i].norm(); }
+
+                    let old_bass = get_bass();
+                    let raw_bass = bass / cfg.bass_norm_factor;
+                    let new_bass = if raw_bass > old_bass { raw_bass } else { old_bass * cfg.smoothing_old + raw_bass * cfg.smoothing_new };
+                    store_bass(new_bass);
+
+                    let old_mid = get_mid();
+                    let raw_mid = mid / cfg.mid_norm_factor;
+                    let new_mid = if raw_mid > old_mid { raw_mid } else { old_mid * cfg.smoothing_old + raw_mid * cfg.smoothing_new };
+                    store_mid(new_mid);
+
+                    idx = 0;
+                }
+            }
+        },
+        |err| eprintln!("Audio stream error: {}", err),
+        None,
+    )?;
+    
+    stream.play()?;
+    Ok(stream)
 }

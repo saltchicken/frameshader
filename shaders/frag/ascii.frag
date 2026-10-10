@@ -13,6 +13,10 @@ uniform float sensitivity = 1.0; // <-- ADD THIS SENSITIVITY UNIFORM
 
 uniform float numChars = 10.0;
 
+// --- AUDIO UNIFORMS ---
+uniform float audio_bass;
+uniform float audio_mid;
+
 void main()
 {
     // ... (steps 1-3 are the same)

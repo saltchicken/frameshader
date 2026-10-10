@@ -13,5 +13,17 @@
 
   "rain_speed": 0.2,
   "tail_length": 1.3,
-  "flicker_speed": 15.0
+  "flicker_speed": 15.0,
+
+  // Audio reactive parameters
+  "audio": {
+    "bass_bin_start": 1,
+    "bass_bin_end": 3,
+    "mid_bin_start": 6,
+    "mid_bin_end": 22,
+    "smoothing_old": 0.7,
+    "smoothing_new": 0.3,
+    "bass_norm_factor": 6.0,
+    "mid_norm_factor": 34.0
+  }
 }
