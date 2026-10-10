@@ -13,20 +13,21 @@
       }
     },
 
-    // --- STAGE 2: WARPS & FILTERS ---
     {
-      "name": "warp/vortex",
+      "name": "warp/vortex2",
       "params": {
-        "sensitivity": 0.5,
-        "vortex_speed": 10.02,
-        "vortex_arms": 8.0,
-        "vortex_spin": 0.4,
-        "vortex_center_size": 0.05,
-        "vortex_fov": 10.5,
-        "vortex_color_separation": 0.015,
-        "vortex_strobe_size": 0.001
-      }
-    },
+        "sensitivity": 0.2,
+        "swirl_strength": 0.1,
+        "vortex_radius": 1.5,
+        "spin_speed": 1.0,
+        "bass_gain": 1.0,
+        "mid_gain": 1.0,
+        "treble_gain": 0.0,
+        "vol_gain": 0.0,
+        "noise_gate": 0.15
+    }
+  },
+
     // {
     //   "name": "warp/kaleido",
     //   "params": {
