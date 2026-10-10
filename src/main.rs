@@ -10,6 +10,7 @@ use std::sync::mpsc;
 use std::fs;
 use std::time::{Duration, Instant};
 use std::sync::{Arc, RwLock};
+use std::path::{Path, PathBuf};
 use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
 
 use audio::{build_audio_stream, AudioState};
@@ -18,9 +19,41 @@ use shader::{compile_shader_program, ShaderProgram};
 
 struct ShaderDef {
     name: String,
-    file_name: String,
-    static_src: &'static str,
+    path: PathBuf,
     program: Option<ShaderProgram>,
+}
+
+fn discover_shaders(dir: &Path, vert_src: &str, defs: &mut Vec<ShaderDef>) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                // Recursively search subdirectories
+                discover_shaders(&path, vert_src, defs);
+            } else if path.extension().map_or(false, |ext| ext == "frag") {
+                // Keep the relative directory structure as part of the name
+                let relative_path = path.strip_prefix("shaders/frag").unwrap_or(&path);
+                let name = relative_path.with_extension("") // removes the .frag
+                    .to_string_lossy()
+                    .replace('\\', "/"); // Ensures Windows paths use standard forward slashes
+                
+                let src = fs::read_to_string(&path).unwrap_or_default();
+                let program = compile_shader_program(vert_src, &src);
+                
+                if program.is_none() {
+                    eprintln!("Warning: Failed to compile {} initially.", name);
+                } else {
+                    println!("Loaded shader: {}", name);
+                }
+
+                defs.push(ShaderDef {
+                    name,
+                    path,
+                    program,
+                });
+            }
+        }
+    }
 }
 
 fn main() {
@@ -41,7 +74,7 @@ fn main() {
     let mut is_file = false;
     let mut has_camera = true;
 
-    // Graceful camera degradation (Fixed unwrap for default capture)
+    // Graceful camera degradation
     let mut cam = if args.len() > 1 {
         let input = &args[1];
         if let Ok(cam_index) = input.parse::<i32>() {
@@ -128,44 +161,16 @@ fn main() {
         );
     }
 
-    let vert_src = include_str!("../shaders/vert/shader.vert");
+    // Read the vertex shader dynamically from disk
+    let vert_src = fs::read_to_string("shaders/vert/shader.vert")
+        .expect("Failed to read vertex shader from shaders/vert/shader.vert");
     
-    let mut shader_defs = vec![
-        ShaderDef { name: "ASCII".into(), file_name: "ascii/static.frag".into(), static_src: include_str!("../shaders/frag/ascii/static.frag"), program: None },
-        ShaderDef { name: "Matrix".into(), file_name: "ascii/matrix/matrix.frag".into(), static_src: include_str!("../shaders/frag/ascii/matrix/matrix.frag"), program: None },
-        ShaderDef { name: "Color".into(), file_name: "ascii/matrix/color.frag".into(), static_src: include_str!("../shaders/frag/ascii/matrix/color.frag"), program: None },
-        // ShaderDef { name: "Flux".into(), file_name: "ascii/matrix/flux.frag".into(), static_src: include_str!("../shaders/frag/ascii/matrix/flux.frag"), program: None },
-        // ShaderDef { name: "CRT".into(), file_name: "archived/crt.frag".into(), static_src: include_str!("../shaders/frag/archived/crt.frag"), program: None },
-        // ShaderDef { name: "Edge".into(), file_name: "filters/edge.frag".into(), static_src: include_str!("../shaders/frag/filters/edge.frag"), program: None },
-        // ShaderDef { name: "VHS".into(), file_name: "archived/vhs.frag".into(), static_src: include_str!("../shaders/frag/archived/vhs.frag"), program: None },
-        // ShaderDef { name: "Halftone".into(), file_name: "archived/halftone.frag".into(), static_src: include_str!("../shaders/frag/archived/halftone.frag"), program: None },
-        // ShaderDef { name: "Prism".into(), file_name: "archived/prism.frag".into(), static_src: include_str!("../shaders/frag/archived/prism.frag"), program: None },
-        // ShaderDef { name: "GlitchSort".into(), file_name: "archived/glitch_sort.frag".into(), static_src: include_str!("../shaders/frag/archived/glitch_sort.frag"), program: None },
-        ShaderDef { name: "Vortex".into(), file_name: "warp/vortex.frag".into(), static_src: include_str!("../shaders/frag/warp/vortex.frag"), program: None },
-        // ShaderDef { name: "Topography".into(), file_name: "geo/topography.frag".into(), static_src: include_str!("../shaders/frag/geo/topography.frag"), program: None },
-        // ShaderDef { name: "Comic".into(), file_name: "archived/comic.frag".into(), static_src: include_str!("../shaders/frag/archived/comic.frag"), program: None },
-        // ShaderDef { name: "Thermal".into(), file_name: "archived/thermal.frag".into(), static_src: include_str!("../shaders/frag/archived/thermal.frag"), program: None },
-        // ShaderDef { name: "Paint".into(), file_name: "archived/paint.frag".into(), static_src: include_str!("../shaders/frag/archived/paint.frag"), program: None },
-        // ShaderDef { name: "NightVision".into(), file_name: "archived/nightvision.frag".into(), static_src: include_str!("../shaders/frag/archived/nightvision.frag"), program: None },
-        // ShaderDef { name: "Dither".into(), file_name: "archived/dither.frag".into(), static_src: include_str!("../shaders/frag/archived/dither.frag"), program: None },
-        ShaderDef { name: "Resonance".into(), file_name: "warp/resonance.frag".into(), static_src: include_str!("../shaders/frag/warp/resonance.frag"), program: None },
-    ];
+    // Dynamically discover and load all fragment shaders
+    let mut shader_defs = Vec::new();
+    discover_shaders(Path::new("shaders/frag"), &vert_src, &mut shader_defs);
 
-    for def in &mut shader_defs {
-        let mut loaded_src = def.static_src.to_string();
-        
-        {
-            let path = format!("shaders/frag/{}", def.file_name);
-            if let Ok(src) = fs::read_to_string(&path) {
-                loaded_src = src;
-            }
-        }
-
-        if let Some(prog) = compile_shader_program(vert_src, &loaded_src) {
-            def.program = Some(prog);
-        } else {
-            eprintln!("Warning: Failed to compile {} initially.", def.name);
-        }
+    if shader_defs.is_empty() {
+        eprintln!("Warning: No fragment shaders found in shaders/frag/ !");
     }
 
     let mut frame = opencv::core::Mat::default();
@@ -176,10 +181,10 @@ fn main() {
     let mut debouncer = new_debouncer(Duration::from_millis(150), tx)
         .expect("Failed to initialize file watcher debouncer");
     
-    if !std::path::Path::new(config_path).exists() {
+    if !Path::new(config_path).exists() {
         let default_config_str = r#"{
-// The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "Halftone", "Prism", "GlitchSort", "Vortex", "Topography", "Comic", "Thermal", "Paint", "NightVision", "Dither", "Resonance"
-  "mode": "Flux",
+  // The active shader mode uses the folder path and filename (e.g., "ascii/matrix/flux" or "warp/resonance")
+  "mode": "ascii/matrix/flux",
   
   // Crop parameters (0.0 to 1.0 for percentage of edges to remove)
   "crop": {
@@ -229,10 +234,10 @@ fn main() {
         fs::write(config_path, default_config_str).unwrap();
     }
     
-    debouncer.watcher().watch(std::path::Path::new("."), RecursiveMode::NonRecursive)
+    debouncer.watcher().watch(Path::new("."), RecursiveMode::NonRecursive)
         .expect("Failed to watch top level directory");
     
-    debouncer.watcher().watch(std::path::Path::new("shaders/frag"), RecursiveMode::Recursive)
+    debouncer.watcher().watch(Path::new("shaders/frag"), RecursiveMode::Recursive)
         .expect("Failed to watch shaders directory");
 
     let mut current_config = load_config(config_path);
@@ -295,9 +300,9 @@ fn main() {
                         if let Some(ext) = event.path.extension() {
                             if ext == "frag" {
                                 for def in &mut shader_defs {
-                                    if event.path.ends_with(&def.file_name) {
+                                    if event.path.ends_with(&def.path) {
                                         if let Ok(src) = fs::read_to_string(&event.path) {
-                                            if let Some(new_prog) = compile_shader_program(vert_src, &src) {
+                                            if let Some(new_prog) = compile_shader_program(&vert_src, &src) {
                                                 def.program = Some(new_prog);
                                                 println!("Hot-reloaded shader: {}", def.name);
                                             }
@@ -346,7 +351,6 @@ fn main() {
         if last_video_update.elapsed() >= frame_duration {
             if has_camera {
                 if cam.read(&mut frame).unwrap_or(false) && !frame.empty() {
-                    // CPU Color conversion eliminated entirely
                     update_texture = true;
                     last_video_update = Instant::now();
                 } else if is_file {
@@ -355,60 +359,62 @@ fn main() {
             }
         }
 
-        // Fallback gracefully if the active shader failed to compile
-        if let Some(prog) = &shader_defs[current_mode].program {
-            unsafe {
-                gl::ActiveTexture(gl::TEXTURE0);
-                gl::BindTexture(gl::TEXTURE_2D, video_texture);
-                
-                if update_texture {
-                    // Upload native OpenCV BGR frame directly to GPU
-                    gl::TexSubImage2D(
-                        gl::TEXTURE_2D, 0, 0, 0, 
-                        cam_width, cam_height, 
-                        gl::BGR, gl::UNSIGNED_BYTE, 
-                        frame.data() as *const _
-                    );
-                }
-
-                gl::UseProgram(prog.id);
-                
-                // HashMap-driven Uniform Dispatch
-                for (name, &loc) in &prog.uniforms {
-                    match name.as_str() {
-                        "videoTexture" => gl::Uniform1i(loc, 0),
-                        "fontAtlas" => gl::Uniform1i(loc, 1),
-                        "resolution" => gl::Uniform2f(loc, fb_width as f32, fb_height as f32),
-                        "charSize" => gl::Uniform2f(loc, current_config.font_width, current_config.font_height),
-                        "numChars" => gl::Uniform1f(loc, current_config.num_chars),
-                        "time" => gl::Uniform1f(loc, glfw.get_time() as f32),
-                        "crop" => {
-                            let (c_l, c_r, c_t, c_b) = current_config.crop.sanitize();
-                            gl::Uniform4f(loc, c_l, c_r, c_t, c_b);
-                        },
-                        "sensitivity" => gl::Uniform1f(loc, current_config.sensitivity),
-                        "rain_speed" => gl::Uniform1f(loc, current_config.rain_speed),
-                        "tail_length" => gl::Uniform1f(loc, current_config.tail_length),
-                        "flicker_speed" => gl::Uniform1f(loc, current_config.flicker_speed),
-                        "resonance_ripples" => gl::Uniform1f(loc, current_config.resonance_ripples),
-                        "vortex_speed" => gl::Uniform1f(loc, current_config.vortex_speed),
-                        "vortex_arms" => gl::Uniform1f(loc, current_config.vortex_arms),
-                        "vortex_spin" => gl::Uniform1f(loc, current_config.vortex_spin),
-                        "vortex_center_size" => gl::Uniform1f(loc, current_config.vortex_center_size),
-                        "vortex_fov" => gl::Uniform1f(loc, current_config.vortex_fov),
-                        "vortex_color_separation" => gl::Uniform1f(loc, current_config.vortex_color_separation),
-                        "vortex_strobe_size" => gl::Uniform1f(loc, current_config.vortex_strobe_size),
-                        "audio_bass" => gl::Uniform1f(loc, audio_state.get_bass()),
-                        "audio_mid" => gl::Uniform1f(loc, audio_state.get_mid()),
-                        "audio_treble" => gl::Uniform1f(loc, audio_state.get_treble()),
-                        "audio_volume" => gl::Uniform1f(loc, audio_state.get_volume()),
-                        "audio_peak_freq" => gl::Uniform1f(loc, audio_state.get_peak_freq()),
-                        _ => {} // Ignore unexpected uniforms gracefully
+        // Fallback gracefully if the active shader failed to compile or the array is empty
+        if !shader_defs.is_empty() {
+            if let Some(prog) = &shader_defs[current_mode].program {
+                unsafe {
+                    gl::ActiveTexture(gl::TEXTURE0);
+                    gl::BindTexture(gl::TEXTURE_2D, video_texture);
+                    
+                    if update_texture {
+                        // Upload native OpenCV BGR frame directly to GPU
+                        gl::TexSubImage2D(
+                            gl::TEXTURE_2D, 0, 0, 0, 
+                            cam_width, cam_height, 
+                            gl::BGR, gl::UNSIGNED_BYTE, 
+                            frame.data() as *const _
+                        );
                     }
-                }
 
-                gl::BindVertexArray(vao);
-                gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
+                    gl::UseProgram(prog.id);
+                    
+                    // HashMap-driven Uniform Dispatch
+                    for (name, &loc) in &prog.uniforms {
+                        match name.as_str() {
+                            "videoTexture" => gl::Uniform1i(loc, 0),
+                            "fontAtlas" => gl::Uniform1i(loc, 1),
+                            "resolution" => gl::Uniform2f(loc, fb_width as f32, fb_height as f32),
+                            "charSize" => gl::Uniform2f(loc, current_config.font_width, current_config.font_height),
+                            "numChars" => gl::Uniform1f(loc, current_config.num_chars),
+                            "time" => gl::Uniform1f(loc, glfw.get_time() as f32),
+                            "crop" => {
+                                let (c_l, c_r, c_t, c_b) = current_config.crop.sanitize();
+                                gl::Uniform4f(loc, c_l, c_r, c_t, c_b);
+                            },
+                            "sensitivity" => gl::Uniform1f(loc, current_config.sensitivity),
+                            "rain_speed" => gl::Uniform1f(loc, current_config.rain_speed),
+                            "tail_length" => gl::Uniform1f(loc, current_config.tail_length),
+                            "flicker_speed" => gl::Uniform1f(loc, current_config.flicker_speed),
+                            "resonance_ripples" => gl::Uniform1f(loc, current_config.resonance_ripples),
+                            "vortex_speed" => gl::Uniform1f(loc, current_config.vortex_speed),
+                            "vortex_arms" => gl::Uniform1f(loc, current_config.vortex_arms),
+                            "vortex_spin" => gl::Uniform1f(loc, current_config.vortex_spin),
+                            "vortex_center_size" => gl::Uniform1f(loc, current_config.vortex_center_size),
+                            "vortex_fov" => gl::Uniform1f(loc, current_config.vortex_fov),
+                            "vortex_color_separation" => gl::Uniform1f(loc, current_config.vortex_color_separation),
+                            "vortex_strobe_size" => gl::Uniform1f(loc, current_config.vortex_strobe_size),
+                            "audio_bass" => gl::Uniform1f(loc, audio_state.get_bass()),
+                            "audio_mid" => gl::Uniform1f(loc, audio_state.get_mid()),
+                            "audio_treble" => gl::Uniform1f(loc, audio_state.get_treble()),
+                            "audio_volume" => gl::Uniform1f(loc, audio_state.get_volume()),
+                            "audio_peak_freq" => gl::Uniform1f(loc, audio_state.get_peak_freq()),
+                            _ => {} // Ignore unexpected uniforms gracefully
+                        }
+                    }
+
+                    gl::BindVertexArray(vao);
+                    gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
+                }
             }
         }
         

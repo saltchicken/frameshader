@@ -89,7 +89,7 @@ pub struct ShaderConfig {
 impl Default for ShaderConfig {
     fn default() -> Self {
         Self {
-            mode: "Flux".to_string(),
+            mode: "ascii/matrix/flux".to_string(),
             crop: CropConfig::default(),
             font_width: 8.0,
             font_height: 16.0,
