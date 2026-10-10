@@ -8,3 +8,7 @@ glfw = "0.52"
 gl = "0.14"
 image = "0.24"
 opencv = "0.101.1"
+serde = { version = "1.0", features = ["derive"] }
+json5 = "0.4.1"
+notify = "6.1"
+notify-debouncer-mini = "0.4.1"

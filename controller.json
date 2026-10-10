@@ -1,0 +1,36 @@
+{
+  // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux"
+  "mode": "Flux",
+  
+  // Live parameters
+  "sensitivity": 1.5,
+  "rain_speed": 0.4,
+  "tail_length": 1.3,
+  "flicker_speed": 15.0
+
+  // ==========================================
+  // COMMENTED OUT EXAMPLES
+  // Uncomment the mode you want and adjust!
+  // ==========================================
+
+  /*
+  // Basic ASCII (Only uses sensitivity)
+  "mode": "ASCII",
+  "sensitivity": 1.0,
+  */
+
+  /*
+  // Classic Matrix (Green rain interacting with brightness)
+  "mode": "Matrix",
+  "sensitivity": 2.0,
+  "rain_speed": 0.3,
+  "tail_length": 0.25,
+  */
+
+  /*
+  // Color Matrix (Rain taking the colors of the camera)
+  "mode": "Color",
+  "rain_speed": 0.3,
+  "tail_length": 0.25,
+  */
+}
