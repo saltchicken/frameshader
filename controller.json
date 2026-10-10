@@ -1,8 +1,32 @@
 {
   "pipeline": [
-    "ascii/matrix/matrix",
-    "warp/vortex"
+    {
+      "name": "ascii/matrix/matrix",
+      "params": {
+        "sensitivity": 2.2
+      }
+    },
+    {
+      "name": "warp/resonance",
+      "params": {
+        "sensitivity": 0.5,
+        "vortex_speed": 1.5,
+        "vortex_arms": 4.0,
+        "vortex_spin": 0.4,
+        "vortex_center_size": 0.05,
+        "vortex_fov": 0.9,
+        "vortex_color_separation": 0.015,
+        "vortex_strobe_size": 0.4
+      }
+    }
   ],
+
+  "globals": {
+    "rain_speed": 0.2,
+    "tail_length": 1.0,
+    "flicker_speed": 10.0,
+    "resonance_ripples": 100.0
+  },
 
   "crop": {
     "left": 0.0,
@@ -17,20 +41,6 @@
   
   "playback_fps": 30.0,
   "bpm_multiplier": 20.0,
-  "sensitivity": 1.5,
-
-  "rain_speed": 0.2,
-  "tail_length": 1.0,
-  "flicker_speed": 10.0,
-  "resonance_ripples": 100.0,
-
-  "vortex_speed": 1.5,
-  "vortex_arms": 4.0,
-  "vortex_spin": 0.4,
-  "vortex_center_size": 0.05,
-  "vortex_fov": 0.9,
-  "vortex_color_separation": 0.015,
-  "vortex_strobe_size": 0.4,
 
   "audio": {
     "bass_bin_start": 1,

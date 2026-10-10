@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)]
@@ -62,52 +63,42 @@ impl CropConfig {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PipelineStage {
+    pub name: String,
+    #[serde(default)]
+    pub params: HashMap<String, f32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)]
 pub struct ShaderConfig {
-    pub pipeline: Vec<String>,
+    pub pipeline: Vec<PipelineStage>,
+    pub globals: HashMap<String, f32>,
     pub crop: CropConfig,
     pub font_width: f32,
     pub font_height: f32,
     pub num_chars: f32,
     pub playback_fps: f32,
     pub bpm_multiplier: f32,
-    pub sensitivity: f32,
-    pub rain_speed: f32,
-    pub tail_length: f32,
-    pub flicker_speed: f32,
-    pub resonance_ripples: f32,
-    pub vortex_speed: f32,
-    pub vortex_arms: f32,
-    pub vortex_spin: f32,
-    pub vortex_center_size: f32,
-    pub vortex_fov: f32,
-    pub vortex_color_separation: f32,
-    pub vortex_strobe_size: f32,
     pub audio: AudioConfig,
 }
 
 impl Default for ShaderConfig {
     fn default() -> Self {
+        let default_stage = PipelineStage {
+            name: "ascii/matrix/flux".to_string(),
+            params: HashMap::from([("sensitivity".to_string(), 1.5)]),
+        };
+
         Self {
-            pipeline: vec!["filters/edge".to_string(), "warp/vortex".to_string()],
+            pipeline: vec![default_stage],
+            globals: HashMap::new(),
             crop: CropConfig::default(),
             font_width: 8.0,
             font_height: 16.0,
             num_chars: 10.0,
             playback_fps: 30.0,
             bpm_multiplier: 15.0,
-            sensitivity: 1.5,
-            rain_speed: 0.4,
-            tail_length: 0.3,
-            flicker_speed: 15.0,
-            resonance_ripples: 30.0,
-            vortex_speed: 1.5,
-            vortex_arms: 4.0,
-            vortex_spin: 0.4,
-            vortex_center_size: 0.05,
-            vortex_fov: 0.5,
-            vortex_color_separation: 0.015,
-            vortex_strobe_size: 0.4,
             audio: AudioConfig::default(),
         }
     }

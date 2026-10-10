@@ -28,14 +28,12 @@ fn discover_shaders(dir: &Path, vert_src: &str, defs: &mut Vec<ShaderDef>) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                // Recursively search subdirectories
                 discover_shaders(&path, vert_src, defs);
             } else if path.extension().map_or(false, |ext| ext == "frag") {
-                // Keep the relative directory structure as part of the name
                 let relative_path = path.strip_prefix("shaders/frag").unwrap_or(&path);
-                let name = relative_path.with_extension("") // removes the .frag
+                let name = relative_path.with_extension("")
                     .to_string_lossy()
-                    .replace('\\', "/"); // Ensures Windows paths use standard forward slashes
+                    .replace('\\', "/");
                 
                 let src = fs::read_to_string(&path).unwrap_or_default();
                 let program = compile_shader_program(vert_src, &src);
@@ -46,11 +44,7 @@ fn discover_shaders(dir: &Path, vert_src: &str, defs: &mut Vec<ShaderDef>) {
                     println!("Loaded shader: {}", name);
                 }
 
-                defs.push(ShaderDef {
-                    name,
-                    path,
-                    program,
-                });
+                defs.push(ShaderDef { name, path, program });
             }
         }
     }
@@ -80,7 +74,6 @@ fn main() {
     let mut is_file = false;
     let mut has_camera = true;
 
-    // Graceful camera degradation
     let mut cam = if args.len() > 1 {
         let input = &args[1];
         if let Ok(cam_index) = input.parse::<i32>() {
@@ -136,7 +129,6 @@ fn main() {
         gl::EnableVertexAttribArray(1);
     }
 
-    // Ping-Pong FBO Setup
     let mut fbos = [0u32; 2];
     let mut fbo_textures = [0u32; 2];
     let mut current_fb_width = 0;
@@ -169,7 +161,6 @@ fn main() {
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
         gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
         
-        // Using native OpenCV BGR format directly to bypass CPU conversion
         gl::TexImage2D(
             gl::TEXTURE_2D, 0, gl::RGB as i32, 
             cam_width as i32, cam_height as i32, 
@@ -177,17 +168,11 @@ fn main() {
         );
     }
 
-    // Read the vertex shader dynamically from disk
     let vert_src = fs::read_to_string("shaders/vert/shader.vert")
         .expect("Failed to read vertex shader from shaders/vert/shader.vert");
     
-    // Dynamically discover and load all fragment shaders
     let mut shader_defs = Vec::new();
     discover_shaders(Path::new("shaders/frag"), &vert_src, &mut shader_defs);
-
-    if shader_defs.is_empty() {
-        eprintln!("Warning: No fragment shaders found in shaders/frag/ !");
-    }
 
     let mut frame = opencv::core::Mat::default();
 
@@ -199,68 +184,55 @@ fn main() {
     
     if !Path::new(config_path).exists() {
         let default_config_str = r#"{
-  // The active shader pipeline processes sequentially from top to bottom
   "pipeline": [
-    "filters/edge",
-    "warp/vortex"
+    {
+      "name": "filters/edge",
+      "params": {
+        "sensitivity": 1.2
+      }
+    },
+    {
+      "name": "warp/vortex",
+      "params": {
+        "sensitivity": 1.5,
+        "vortex_speed": 1.5,
+        "vortex_arms": 4.0,
+        "vortex_spin": 0.4,
+        "vortex_center_size": 0.05,
+        "vortex_fov": 0.5,
+        "vortex_color_separation": 0.015,
+        "vortex_strobe_size": 0.4
+      }
+    }
   ],
-  
-  // Crop parameters (0.0 to 1.0 for percentage of edges to remove)
-  "crop": {
-    "left": 0.0,
-    "right": 0.0,
-    "top": 0.0,
-    "bottom": 0.0
+  "globals": {
+    "rain_speed": 0.4,
+    "tail_length": 0.3,
+    "flicker_speed": 15.0,
+    "resonance_ripples": 30.0
   },
-  
-  // Font Graphics Options
+  "crop": { "left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0 },
   "font_width": 8.0,
   "font_height": 16.0,
   "num_chars": 10.0,
-  
-  // Live parameters
   "playback_fps": 30.0,
   "bpm_multiplier": 15.0,
-  "sensitivity": 1.5,
-  "rain_speed": 0.4,
-  "tail_length": 0.3,
-  "flicker_speed": 15.0,
-  "resonance_ripples": 30.0,
-  "vortex_speed": 1.5,
-  "vortex_arms": 4.0,
-  "vortex_spin": 0.4,
-  "vortex_center_size": 0.05,
-  "vortex_fov": 0.5,
-  "vortex_color_separation": 0.015,
-  "vortex_strobe_size": 0.4,
-  
-  // Audio reactive parameters
   "audio": {
-    "bass_bin_start": 1,
-    "bass_bin_end": 3,
-    "mid_bin_start": 6,
-    "mid_bin_end": 22,
-    "treble_bin_start": 23,
-    "treble_bin_end": 100,
-    "smoothing_old": 0.7,
-    "smoothing_new": 0.3,
-    "bass_norm_factor": 6.0,
-    "mid_norm_factor": 34.0,
-    "treble_norm_factor": 20.0,
-    "volume_norm_factor": 100.0
+    "bass_bin_start": 1, "bass_bin_end": 3,
+    "mid_bin_start": 6, "mid_bin_end": 22,
+    "treble_bin_start": 23, "treble_bin_end": 100,
+    "smoothing_old": 0.7, "smoothing_new": 0.3,
+    "bass_norm_factor": 6.0, "mid_norm_factor": 34.0,
+    "treble_norm_factor": 20.0, "volume_norm_factor": 100.0
   }
 }"#;
         fs::write(config_path, default_config_str).unwrap();
     }
     
-    debouncer.watcher().watch(Path::new("."), RecursiveMode::NonRecursive)
-        .expect("Failed to watch top level directory");
-    
-    debouncer.watcher().watch(Path::new("shaders/frag"), RecursiveMode::Recursive)
-        .expect("Failed to watch shaders directory");
+    debouncer.watcher().watch(Path::new("."), RecursiveMode::NonRecursive).unwrap();
+    debouncer.watcher().watch(Path::new("shaders/frag"), RecursiveMode::Recursive).unwrap();
 
     let mut current_config = load_config(config_path);
-    
     let shared_audio_config = Arc::new(RwLock::new(current_config.audio.clone()));
     let audio_state = Arc::new(AudioState::default());
 
@@ -268,7 +240,6 @@ fn main() {
         .map_err(|e| eprintln!("Warning: Failed to start audio stream. ({})", e)).ok();
     
     println!("Watching controller.json & shaders/ for live updates...");
-
     let mut last_video_update = Instant::now();
 
     while !window.should_close() {
@@ -314,7 +285,6 @@ fn main() {
                             config_changed = true;
                         }
                         
-                        // Shader Hot Reloading Detection
                         if let Some(ext) = event.path.extension() {
                             if ext == "frag" {
                                 for def in &mut shader_defs {
@@ -341,13 +311,11 @@ fn main() {
             if let Ok(mut lock) = shared_audio_config.write() {
                 *lock = current_config.audio.clone();
             }
-            
-            println!("Config reloaded: Pipeline {:?}, FPS: [{}], BPM Mult: [{}]", current_config.pipeline, current_config.playback_fps, current_config.bpm_multiplier);
+            println!("Config reloaded.");
         }
 
         let (fb_width, fb_height) = window.get_framebuffer_size();
 
-        // Check if window resized, update FBO textures if necessary
         if fb_width != current_fb_width || fb_height != current_fb_height {
             current_fb_width = fb_width;
             current_fb_height = fb_height;
@@ -401,7 +369,6 @@ fn main() {
             if update_texture {
                 gl::ActiveTexture(gl::TEXTURE0);
                 gl::BindTexture(gl::TEXTURE_2D, video_texture);
-                // Upload native OpenCV BGR frame directly to GPU
                 gl::TexSubImage2D(
                     gl::TEXTURE_2D, 0, 0, 0, 
                     cam_width, cam_height, 
@@ -414,14 +381,13 @@ fn main() {
         let pipeline_len = current_config.pipeline.len();
 
         if pipeline_len > 0 && !shader_defs.is_empty() {
-            for (i, shader_name) in current_config.pipeline.iter().enumerate() {
+            for (i, stage) in current_config.pipeline.iter().enumerate() {
                 let is_first = i == 0;
                 let is_last = i == pipeline_len - 1;
 
-                let shader_idx = get_shader_index(shader_name, &shader_defs);
+                let shader_idx = get_shader_index(&stage.name, &shader_defs);
                 if let Some(prog) = &shader_defs[shader_idx].program {
                     unsafe {
-                        // Bind target FBO (or 0 for the final output pass to the screen)
                         if is_last {
                             gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
                         } else {
@@ -434,22 +400,21 @@ fn main() {
 
                         gl::UseProgram(prog.id);
                         
-                        // Bind Texture 0 (Input)
                         gl::ActiveTexture(gl::TEXTURE0);
                         if is_first {
                             gl::BindTexture(gl::TEXTURE_2D, video_texture);
                         } else {
-                            // Read from the previous pass's FBO
                             gl::BindTexture(gl::TEXTURE_2D, fbo_textures[(i - 1) % 2]);
                         }
 
-                        // Bind Texture 1 (Font Atlas)
                         gl::ActiveTexture(gl::TEXTURE1);
                         gl::BindTexture(gl::TEXTURE_2D, font_texture);
                         
-                        // HashMap-driven Uniform Dispatch
+                        // --- DYNAMIC UNIFORM DISPATCHER ---
                         for (name, &loc) in &prog.uniforms {
-                            match name.as_str() {
+                            let param_str = name.as_str();
+                            match param_str {
+                                // 1. Built-in system textures and variables
                                 "videoTexture" => gl::Uniform1i(loc, 0),
                                 "fontAtlas" => gl::Uniform1i(loc, 1),
                                 "resolution" => gl::Uniform2f(loc, fb_width as f32, fb_height as f32),
@@ -460,24 +425,22 @@ fn main() {
                                     let (c_l, c_r, c_t, c_b) = current_config.crop.sanitize();
                                     gl::Uniform4f(loc, c_l, c_r, c_t, c_b);
                                 },
-                                "sensitivity" => gl::Uniform1f(loc, current_config.sensitivity),
-                                "rain_speed" => gl::Uniform1f(loc, current_config.rain_speed),
-                                "tail_length" => gl::Uniform1f(loc, current_config.tail_length),
-                                "flicker_speed" => gl::Uniform1f(loc, current_config.flicker_speed),
-                                "resonance_ripples" => gl::Uniform1f(loc, current_config.resonance_ripples),
-                                "vortex_speed" => gl::Uniform1f(loc, current_config.vortex_speed),
-                                "vortex_arms" => gl::Uniform1f(loc, current_config.vortex_arms),
-                                "vortex_spin" => gl::Uniform1f(loc, current_config.vortex_spin),
-                                "vortex_center_size" => gl::Uniform1f(loc, current_config.vortex_center_size),
-                                "vortex_fov" => gl::Uniform1f(loc, current_config.vortex_fov),
-                                "vortex_color_separation" => gl::Uniform1f(loc, current_config.vortex_color_separation),
-                                "vortex_strobe_size" => gl::Uniform1f(loc, current_config.vortex_strobe_size),
+                                // 2. Audio variables
                                 "audio_bass" => gl::Uniform1f(loc, audio_state.get_bass()),
                                 "audio_mid" => gl::Uniform1f(loc, audio_state.get_mid()),
                                 "audio_treble" => gl::Uniform1f(loc, audio_state.get_treble()),
                                 "audio_volume" => gl::Uniform1f(loc, audio_state.get_volume()),
                                 "audio_peak_freq" => gl::Uniform1f(loc, audio_state.get_peak_freq()),
-                                _ => {} // Ignore unexpected uniforms gracefully
+                                
+                                // 3. Dynamic custom parameters
+                                custom_param => {
+                                    // Try local stage param first, fallback to global, then default to 0.0
+                                    if let Some(&val) = stage.params.get(custom_param) {
+                                        gl::Uniform1f(loc, val);
+                                    } else if let Some(&val) = current_config.globals.get(custom_param) {
+                                        gl::Uniform1f(loc, val);
+                                    }
+                                }
                             }
                         }
 
@@ -487,7 +450,6 @@ fn main() {
                 }
             }
         } else {
-            // Fallback clear if no shaders are loaded or pipeline is empty
             unsafe {
                 gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
                 gl::Viewport(0, 0, fb_width, fb_height);
