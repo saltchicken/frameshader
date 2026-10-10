@@ -5,7 +5,7 @@ use std::ffi::CString;
 use std::ptr;
 use std::sync::mpsc;
 use std::fs;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
 use serde::{Deserialize, Serialize};
 
@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 #[serde(default)] // Allows partial JSON files (missing fields will use default)
 struct ShaderConfig {
     mode: String,
+    playback_fps: f32,
     sensitivity: f32,
     rain_speed: f32,
     tail_length: f32,
@@ -24,6 +25,7 @@ impl Default for ShaderConfig {
     fn default() -> Self {
         Self {
             mode: "Flux".to_string(),
+            playback_fps: 30.0,
             sensitivity: 1.5,
             rain_speed: 0.4,
             tail_length: 0.3,
@@ -148,7 +150,6 @@ fn main() {
 
     let mut shader_programs = Vec::new();
     for (name, frag_src) in fragment_sources.iter() {
-        // Warning fix: Re-added print statement
         println!("Compiling {}...", name);
         
         let id = compile_shader_program(vert_src, frag_src);
@@ -187,6 +188,7 @@ fn main() {
   "mode": "Flux",
   
   // Live parameters
+  "playback_fps": 30.0,
   "sensitivity": 1.5,
   "rain_speed": 0.4,
   "tail_length": 0.3,
@@ -200,12 +202,14 @@ fn main() {
   /*
   // Basic ASCII (Only uses sensitivity)
   "mode": "ASCII",
+  "playback_fps": 30.0,
   "sensitivity": 1.0,
   */
 
   /*
   // Classic Matrix (Green rain interacting with brightness)
   "mode": "Matrix",
+  "playback_fps": 24.0,
   "sensitivity": 2.0,
   "rain_speed": 0.3,
   "tail_length": 0.25,
@@ -214,6 +218,7 @@ fn main() {
   /*
   // Color Matrix (Rain taking the colors of the camera)
   "mode": "Color",
+  "playback_fps": 30.0,
   "rain_speed": 0.3,
   "tail_length": 0.25,
   */
@@ -229,6 +234,8 @@ fn main() {
     let mut current_mode = get_mode_index(&current_config.mode, &fragment_sources);
     
     println!("Watching controller.json for live updates...");
+
+    let mut last_video_update = Instant::now();
 
     // 5. Main Loop
     while !window.should_close() {
@@ -258,7 +265,7 @@ fn main() {
         if config_changed {
             current_config = load_config(config_path);
             current_mode = get_mode_index(&current_config.mode, &fragment_sources);
-            println!("Config reloaded: Active Mode [{}]", current_config.mode);
+            println!("Config reloaded: Active Mode [{}], FPS: [{}]", current_config.mode, current_config.playback_fps);
         }
 
         unsafe {
@@ -266,45 +273,59 @@ fn main() {
             gl::Clear(gl::COLOR_BUFFER_BIT);
         }
 
-        if cam.read(&mut frame).unwrap_or(false) && !frame.empty() {
-            imgproc::cvt_color_def(&frame, &mut rgb_frame, imgproc::COLOR_BGR2RGB).unwrap();
+        // 1. Check if it's time to read a new video frame
+        let safe_fps = if current_config.playback_fps > 0.1 { current_config.playback_fps } else { 0.1 };
+        let frame_duration = Duration::from_secs_f32(1.0 / safe_fps);
+        let mut update_texture = false;
 
-            let prog = &shader_programs[current_mode];
+        if last_video_update.elapsed() >= frame_duration {
+            if cam.read(&mut frame).unwrap_or(false) && !frame.empty() {
+                imgproc::cvt_color_def(&frame, &mut rgb_frame, imgproc::COLOR_BGR2RGB).unwrap();
+                update_texture = true;
+                last_video_update = Instant::now();
+            } else if is_file {
+                // Loop the video if it reaches the end
+                cam.set(videoio::CAP_PROP_POS_FRAMES, 0.0).unwrap();
+            } else {
+                eprintln!("Camera feed lost!");
+                break;
+            }
+        }
 
-            unsafe {
-                gl::ActiveTexture(gl::TEXTURE0);
-                gl::BindTexture(gl::TEXTURE_2D, video_texture);
-                
+        // 2. Render the frame
+        let prog = &shader_programs[current_mode];
+
+        unsafe {
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, video_texture);
+            
+            // Only send new pixel data to the GPU if we actually read a new frame
+            if update_texture {
                 gl::TexSubImage2D(
                     gl::TEXTURE_2D, 0, 0, 0, 
                     cam_width, cam_height, 
                     gl::RGB, gl::UNSIGNED_BYTE, 
                     rgb_frame.data() as *const _
                 );
-
-                gl::UseProgram(prog.id);
-                
-                if prog.loc_video_texture != -1 { gl::Uniform1i(prog.loc_video_texture, 0); }
-                if prog.loc_font_atlas != -1 { gl::Uniform1i(prog.loc_font_atlas, 1); }
-                if prog.loc_resolution != -1 { gl::Uniform2f(prog.loc_resolution, cam_width as f32, cam_height as f32); }
-                if prog.loc_char_size != -1 { gl::Uniform2f(prog.loc_char_size, 8.0, 16.0); }
-                if prog.loc_num_chars != -1 { gl::Uniform1f(prog.loc_num_chars, 10.0); }
-                if prog.loc_time != -1 { gl::Uniform1f(prog.loc_time, glfw.get_time() as f32); }
-
-                // Live Config Uniforms
-                if prog.loc_sensitivity != -1 { gl::Uniform1f(prog.loc_sensitivity, current_config.sensitivity); }
-                if prog.loc_rain_speed != -1 { gl::Uniform1f(prog.loc_rain_speed, current_config.rain_speed); }
-                if prog.loc_tail_length != -1 { gl::Uniform1f(prog.loc_tail_length, current_config.tail_length); }
-                if prog.loc_flicker_speed != -1 { gl::Uniform1f(prog.loc_flicker_speed, current_config.flicker_speed); }
-
-                gl::BindVertexArray(vao);
-                gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
             }
-        } else if is_file {
-            cam.set(videoio::CAP_PROP_POS_FRAMES, 0.0).unwrap();
-        } else {
-            eprintln!("Camera feed lost!");
-            break;
+
+            gl::UseProgram(prog.id);
+            
+            if prog.loc_video_texture != -1 { gl::Uniform1i(prog.loc_video_texture, 0); }
+            if prog.loc_font_atlas != -1 { gl::Uniform1i(prog.loc_font_atlas, 1); }
+            if prog.loc_resolution != -1 { gl::Uniform2f(prog.loc_resolution, cam_width as f32, cam_height as f32); }
+            if prog.loc_char_size != -1 { gl::Uniform2f(prog.loc_char_size, 8.0, 16.0); }
+            if prog.loc_num_chars != -1 { gl::Uniform1f(prog.loc_num_chars, 10.0); }
+            if prog.loc_time != -1 { gl::Uniform1f(prog.loc_time, glfw.get_time() as f32); }
+
+            // Live Config Uniforms
+            if prog.loc_sensitivity != -1 { gl::Uniform1f(prog.loc_sensitivity, current_config.sensitivity); }
+            if prog.loc_rain_speed != -1 { gl::Uniform1f(prog.loc_rain_speed, current_config.rain_speed); }
+            if prog.loc_tail_length != -1 { gl::Uniform1f(prog.loc_tail_length, current_config.tail_length); }
+            if prog.loc_flicker_speed != -1 { gl::Uniform1f(prog.loc_flicker_speed, current_config.flicker_speed); }
+
+            gl::BindVertexArray(vao);
+            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
         }
         
         window.swap_buffers();

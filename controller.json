@@ -3,6 +3,7 @@
   "mode": "Flux",
   
   // Live parameters
+  "playback_fps": 10.0,
   "sensitivity": 1.5,
   "rain_speed": 0.4,
   "tail_length": 1.3,
@@ -16,12 +17,14 @@
   /*
   // Basic ASCII (Only uses sensitivity)
   "mode": "ASCII",
+  "playback_fps": 30.0,
   "sensitivity": 1.0,
   */
 
   /*
   // Classic Matrix (Green rain interacting with brightness)
   "mode": "Matrix",
+  "playback_fps": 24.0,
   "sensitivity": 2.0,
   "rain_speed": 0.3,
   "tail_length": 0.25,
@@ -30,6 +33,7 @@
   /*
   // Color Matrix (Rain taking the colors of the camera)
   "mode": "Color",
+  "playback_fps": 30.0,
   "rain_speed": 0.3,
   "tail_length": 0.25,
   */
