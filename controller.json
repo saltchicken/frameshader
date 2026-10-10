@@ -4,7 +4,7 @@
     // --- STAGE 1: BASE EFFECTS ---
     // Uncomment 'flux' instead of 'matrix' to get the flickering tail effect
     {
-      "name": "ascii/matrix/color",
+      "name": "ascii/audio_react",
       "params": {
         "sensitivity": 1.5,
         "flicker_speed": 15.0
@@ -24,19 +24,19 @@
     // },
 
     // --- STAGE 2: WARPS & FILTERS ---
-    {
-      "name": "warp/vortex",
-      "params": {
-        "sensitivity": 0.5,
-        "vortex_speed": 0.02,
-        "vortex_arms": 8.0,
-        "vortex_spin": 0.4,
-        "vortex_center_size": 0.05,
-        "vortex_fov": 10.5,
-        "vortex_color_separation": 0.015,
-        "vortex_strobe_size": 0.001
-      }
-    },
+    // {
+    //   "name": "warp/vortex",
+    //   "params": {
+    //     "sensitivity": 0.5,
+    //     "vortex_speed": 0.02,
+    //     "vortex_arms": 8.0,
+    //     "vortex_spin": 0.4,
+    //     "vortex_center_size": 0.05,
+    //     "vortex_fov": 10.5,
+    //     "vortex_color_separation": 0.015,
+    //     "vortex_strobe_size": 0.001
+    //   }
+    // },
     // {
     //   "name": "warp/kaleido",
     //   "params": {
