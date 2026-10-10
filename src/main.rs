@@ -1,7 +1,6 @@
 use glfw::{Action, Context, Key};
-use nokhwa::pixel_format::RgbFormat;
-use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
-use nokhwa::Camera;
+use opencv::{prelude::*, videoio, imgproc, core};
+use std::env;
 use std::ffi::CString;
 use std::ptr;
 
@@ -28,30 +27,40 @@ fn main() {
         .expect("Failed to create GLFW window.");
     window.make_current();
     window.set_key_polling(true);
+    
+    // Enable VSync so the video loop doesn't render as fast as the CPU allows
+    glfw.set_swap_interval(glfw::SwapInterval::Sync(1));
 
     // Load OpenGL function pointers
     gl::load_with(|s| window.get_proc_address(s) as *const _);
 
-    // 2. Initialize Camera (nokhwa)
-    println!("Initializing camera at Index 0...");
+    // 2. Initialize Video Input (Camera or File)
+    let args: Vec<String> = env::args().collect();
+    let mut is_file = false;
+
+    let mut cam = if args.len() > 1 {
+        let input = &args[1];
+        
+        // Try to parse the argument as a number first (for camera index)
+        if let Ok(cam_index) = input.parse::<i32>() {
+            println!("Opening camera index {}...", cam_index);
+            videoio::VideoCapture::new(cam_index, videoio::CAP_ANY).expect("Failed to open camera")
+        } else {
+            // If it's not a number, treat it as a file path
+            println!("Opening video file {}...", input);
+            is_file = true;
+            videoio::VideoCapture::from_file(input, videoio::CAP_ANY).expect("Failed to open video file")
+        }
+    } else {
+        println!("No input specified. Defaulting to camera 0...");
+        videoio::VideoCapture::new(0, videoio::CAP_ANY).expect("Failed to open camera")
+    };
+
+    let cam_width = cam.get(videoio::CAP_PROP_FRAME_WIDTH).unwrap() as i32;
+    let cam_height = cam.get(videoio::CAP_PROP_FRAME_HEIGHT).unwrap() as i32;
+    let fps = cam.get(videoio::CAP_PROP_FPS).unwrap();
     
-    // Ask nokhwa to look at what the camera supports and pick the highest resolution
-    let mut cam = Camera::new(
-        CameraIndex::Index(0),
-        RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
-    ).expect("Failed to initialize camera at Index 0");
-    
-    cam.open_stream().expect("Failed to open camera stream");
-    
-    let actual_format = cam.camera_format();
-    let cam_width = actual_format.resolution().width();
-    let cam_height = actual_format.resolution().height();
-    
-    println!("Camera stream opened successfully at {}x{} ({} fps)", 
-        cam_width, 
-        cam_height,
-        actual_format.frame_rate()
-    );
+    println!("Input opened successfully at {}x{} ({} fps)", cam_width, cam_height, fps);
 
     // 3. Setup Geometry (Fullscreen Quad)
     let vertices: [f32; 20] = [
@@ -82,7 +91,6 @@ fn main() {
     }
 
     // 4. Load Font Atlas Texture (image crate)
-    // Note: Since this is read at runtime, ensure the font_atlases directory is present next to the executable.
     let img = image::open("font_atlases/dejavu_sans_mono-10-8x16.png")
         .expect("Failed to load font atlas")
         .into_rgba8();
@@ -108,10 +116,10 @@ fn main() {
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
         
-        // Prevent skewing/crashing on weird camera resolutions
+        // Prevent skewing/crashing on weird resolutions
         gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
         
-        // Allocate empty GPU memory ONCE using the known camera resolution
+        // Allocate empty GPU memory ONCE using the known video resolution
         gl::TexImage2D(
             gl::TEXTURE_2D, 0, gl::RGB as i32, 
             cam_width as i32, cam_height as i32, 
@@ -120,10 +128,8 @@ fn main() {
     }
 
     // 6. Compile Shaders (PORTABILITY + CACHING)
-    // include_str! embeds the shaders directly into the binary at compile time.
     let vert_src = include_str!("../shaders/vert/shader.vert");
     
-    // We pair a human-readable name with the baked-in source string
     let fragment_sources = [
         ("ASCII", include_str!("../shaders/frag/ascii.frag")),
         ("Matrix", include_str!("../shaders/frag/ascii_matrix.frag")),
@@ -154,6 +160,10 @@ fn main() {
     let mut current_mode = 0; 
     println!("Press SPACE to cycle modes, or 1-4 to select directly.");
 
+    // Pre-allocate Mats for OpenCV to prevent allocating memory inside the hot loop
+    let mut frame = core::Mat::default();
+    let mut rgb_frame = core::Mat::default();
+
     // 7. Main Loop
     while !window.should_close() {
         glfw.poll_events();
@@ -183,52 +193,59 @@ fn main() {
             gl::Clear(gl::COLOR_BUFFER_BIT);
         }
 
-        // Grab frame from webcam and decode it to pure RGB pixels
-        if let Ok(frame) = cam.frame() {
-            if let Ok(decoded) = frame.decode_image::<RgbFormat>() {
-                let prog = &shader_programs[current_mode];
+        // Grab frame from video file or camera
+        if cam.read(&mut frame).unwrap_or(false) && !frame.empty() {
+            // Convert OpenCV's default BGR to RGB for OpenGL (Using OpenCV 5.0 default arguments fix)
+            imgproc::cvt_color_def(&frame, &mut rgb_frame, imgproc::COLOR_BGR2RGB).unwrap();
 
-                unsafe {
-                    gl::ActiveTexture(gl::TEXTURE0);
-                    gl::BindTexture(gl::TEXTURE_2D, video_texture);
-                    
-                    // PERFORMANCE FIX: Use TexSubImage2D to update existing memory 
-                    // rather than reallocating memory every frame.
-                    gl::TexSubImage2D(
-                        gl::TEXTURE_2D, 0, 0, 0, 
-                        decoded.width() as i32, decoded.height() as i32, 
-                        gl::RGB, gl::UNSIGNED_BYTE, 
-                        decoded.as_raw().as_ptr() as *const _
-                    );
+            let prog = &shader_programs[current_mode];
 
-                    // Use active shader program
-                    gl::UseProgram(prog.id);
-                    
-                    // Set uniforms using the pre-cached locations
-                    // Note: Unused uniforms in specific shaders will silently be ignored by OpenGL (location = -1)
-                    if prog.loc_video_texture != -1 { gl::Uniform1i(prog.loc_video_texture, 0); }
-                    if prog.loc_font_atlas != -1 { gl::Uniform1i(prog.loc_font_atlas, 1); }
-                    if prog.loc_resolution != -1 { gl::Uniform2f(prog.loc_resolution, decoded.width() as f32, decoded.height() as f32); }
-                    if prog.loc_char_size != -1 { gl::Uniform2f(prog.loc_char_size, 8.0, 16.0); }
-                    if prog.loc_num_chars != -1 { gl::Uniform1f(prog.loc_num_chars, 10.0); }
-                    if prog.loc_sensitivity != -1 { gl::Uniform1f(prog.loc_sensitivity, 1.5); }
-                    
-                    // Pass time to the matrix shaders so the rain animates
-                    if prog.loc_time != -1 { gl::Uniform1f(prog.loc_time, glfw.get_time() as f32); }
+            unsafe {
+                gl::ActiveTexture(gl::TEXTURE0);
+                gl::BindTexture(gl::TEXTURE_2D, video_texture);
+                
+                // Use TexSubImage2D to update existing memory 
+                gl::TexSubImage2D(
+                    gl::TEXTURE_2D, 0, 0, 0, 
+                    cam_width, cam_height, 
+                    gl::RGB, gl::UNSIGNED_BYTE, 
+                    rgb_frame.data() as *const _
+                );
 
-                    // Draw
-                    gl::BindVertexArray(vao);
-                    gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
-                }
+                // Use active shader program
+                gl::UseProgram(prog.id);
+                
+                // Set uniforms using the pre-cached locations
+                if prog.loc_video_texture != -1 { gl::Uniform1i(prog.loc_video_texture, 0); }
+                if prog.loc_font_atlas != -1 { gl::Uniform1i(prog.loc_font_atlas, 1); }
+                if prog.loc_resolution != -1 { gl::Uniform2f(prog.loc_resolution, cam_width as f32, cam_height as f32); }
+                if prog.loc_char_size != -1 { gl::Uniform2f(prog.loc_char_size, 8.0, 16.0); }
+                if prog.loc_num_chars != -1 { gl::Uniform1f(prog.loc_num_chars, 10.0); }
+                if prog.loc_sensitivity != -1 { gl::Uniform1f(prog.loc_sensitivity, 1.5); }
+                
+                // Pass time to the matrix shaders so the rain animates
+                if prog.loc_time != -1 { gl::Uniform1f(prog.loc_time, glfw.get_time() as f32); }
+
+                // Draw
+                gl::BindVertexArray(vao);
+                gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
             }
+        } else if is_file {
+            // Video file ended. Loop back to frame 0.
+            cam.set(videoio::CAP_PROP_POS_FRAMES, 0.0).unwrap();
+        } else {
+            // Camera stream died or disconnected. Exit the loop.
+            eprintln!("Camera feed lost!");
+            break;
         }
+        
         window.swap_buffers();
     }
 }
 
 // --- Helper Functions ---
 
-// Modified to take raw string slices from include_str! instead of file paths
+// Takes raw string slices from include_str!
 fn compile_shader_program(v_src: &str, f_src: &str) -> u32 {
     unsafe {
         let vertex = gl::CreateShader(gl::VERTEX_SHADER);
