@@ -152,6 +152,8 @@ fn main() {
         ("Matrix", include_str!("../shaders/frag/ascii_matrix.frag")),
         ("Color", include_str!("../shaders/frag/ascii_matrix_color.frag")),
         ("Flux", include_str!("../shaders/frag/ascii_matrix_flux.frag")),
+        ("CRT", include_str!("../shaders/frag/crt.frag")),
+        ("Edge", include_str!("../shaders/frag/edge.frag")),
     ];
 
     let mut shader_programs = Vec::new();

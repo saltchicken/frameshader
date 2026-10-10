@@ -1,14 +1,14 @@
 {
-  // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux"
-  "mode": "Flux",
+  // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge"
+  "mode": "Edge",
   
   // Font Graphics Options
-  "font_width": 2.0,
-  "font_height": 4.0,
+  "font_width": 1.0,
+  "font_height": 2.0,
   "num_chars": 10.0,
   
   // Live parameters
-  "playback_fps": 30.0,
+  "playback_fps": 60.0,
   "sensitivity": 1.5,
 
   "rain_speed": 0.2,
