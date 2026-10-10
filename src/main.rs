@@ -117,6 +117,7 @@ struct ShaderConfig {
     rain_speed: f32,
     tail_length: f32,
     flicker_speed: f32,
+    resonance_ripples: f32,
     audio: AudioConfig,
 }
 
@@ -133,6 +134,7 @@ impl Default for ShaderConfig {
             rain_speed: 0.4,
             tail_length: 0.3,
             flicker_speed: 15.0,
+            resonance_ripples: 30.0,
             audio: AudioConfig::default(),
         }
     }
@@ -151,6 +153,7 @@ struct ShaderProgram {
     loc_rain_speed: i32,
     loc_tail_length: i32,
     loc_flicker_speed: i32,
+    loc_resonance_ripples: i32,
     loc_audio_bass: i32,
     loc_audio_mid: i32,
     loc_audio_treble: i32,
@@ -291,6 +294,7 @@ fn main() {
                 loc_rain_speed: gl::GetUniformLocation(id, c"rain_speed".as_ptr()),
                 loc_tail_length: gl::GetUniformLocation(id, c"tail_length".as_ptr()),
                 loc_flicker_speed: gl::GetUniformLocation(id, c"flicker_speed".as_ptr()),
+                loc_resonance_ripples: gl::GetUniformLocation(id, c"resonance_ripples".as_ptr()),
                 loc_audio_bass: gl::GetUniformLocation(id, c"audio_bass".as_ptr()),
                 loc_audio_mid: gl::GetUniformLocation(id, c"audio_mid".as_ptr()),
                 loc_audio_treble: gl::GetUniformLocation(id, c"audio_treble".as_ptr()),
@@ -315,7 +319,7 @@ fn main() {
     // Create default file if it doesn't exist, using a raw string to preserve comments
     if !std::path::Path::new(config_path).exists() {
         let default_config_str = r#"{
-// The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "Halftone", "Prism", "GlitchSort", "Vortex", "Topography", "Comic", "Thermal", "Paint", "NightVision", "Dither"
+// The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "Halftone", "Prism", "GlitchSort", "Vortex", "Topography", "Comic", "Thermal", "Paint", "NightVision", "Dither", "Resonance"
   "mode": "Flux",
   
   // Crop parameters (0.0 to 1.0 for percentage of edges to remove)
@@ -337,6 +341,7 @@ fn main() {
   "rain_speed": 0.4,
   "tail_length": 0.3,
   "flicker_speed": 15.0,
+  "resonance_ripples": 30.0,
   
   // Audio reactive parameters
   "audio": {
@@ -510,6 +515,7 @@ fn main() {
             if prog.loc_rain_speed != -1 { gl::Uniform1f(prog.loc_rain_speed, current_config.rain_speed); }
             if prog.loc_tail_length != -1 { gl::Uniform1f(prog.loc_tail_length, current_config.tail_length); }
             if prog.loc_flicker_speed != -1 { gl::Uniform1f(prog.loc_flicker_speed, current_config.flicker_speed); }
+            if prog.loc_resonance_ripples != -1 { gl::Uniform1f(prog.loc_resonance_ripples, current_config.resonance_ripples); }
             
             // Live Audio Uniforms
             if prog.loc_audio_bass != -1 { gl::Uniform1f(prog.loc_audio_bass, get_bass()); }
@@ -681,10 +687,7 @@ where
                     let old_peak_freq = get_peak_freq();
                     
                     // Smooth both the attack and decay of the frequency shifts
-                    // 0.9 old / 0.1 new heavily dampens the erratic jumps. 
-                    // Increase 0.9 (e.g., 0.95) to make it even slower, or decrease it to make it faster.
                     let new_peak_freq = (old_peak_freq * 0.9) + (raw_peak_freq * 0.1);
-                    
                     store_peak_freq(new_peak_freq);
 
                     idx = 0;

@@ -1,6 +1,6 @@
 {
-  // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "halftone", "Prism", "GlitchSort", "Vortex", "Topography"
-  "mode": "resonance",
+  // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "halftone", "Prism", "GlitchSort", "Vortex", "Topography", "Resonance"
+  "mode": "Resonance",
 
   "crop": {
     "left": 0.0,
@@ -21,6 +21,7 @@
   "rain_speed": 0.2,
   "tail_length": 1.0,
   "flicker_speed": 10.0,
+  "resonance_ripples": 100.0,
 
   // Audio reactive parameters
   "audio": {

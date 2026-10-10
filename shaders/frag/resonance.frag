@@ -6,6 +6,7 @@ uniform sampler2D videoTexture;
 uniform vec2 resolution;
 uniform float time;
 uniform float sensitivity;
+uniform float resonance_ripples;
 
 // --- AUDIO UNIFORMS ---
 uniform float audio_bass;
@@ -35,12 +36,10 @@ void main() {
     float norm_pitch = clamp((log_freq - 4.3) / 10.0, 0.0, 1.0); 
 
     // Smooth out the pitch slightly so the visuals don't jitter too violently
-    // (In a real scenario you might smooth this in Rust, but we can ease it in GLSL)
     float pitch_factor = norm_pitch;
 
-    // 2. Calculate Cymatic Ripples
-    // High pitch = lots of tight rings (e.g. 60 rings). Low pitch = few wide rings (e.g. 5 rings)
-    float ripple_count = 5.0 + (pitch_factor * 55.0); 
+    // 2. Calculate Cymatic Ripples using our new JSON uniform
+    float ripple_count = 5.0 + (pitch_factor * resonance_ripples); 
     
     // Animate the ripples flowing outward. Speed is influenced by volume.
     float phase = (time * 4.0) - (r * ripple_count);
