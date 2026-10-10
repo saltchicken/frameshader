@@ -1,59 +1,98 @@
 {
   "pipeline": [
+    // --- STAGE 1: BASE EFFECTS ---
+    // Uncomment 'flux' instead of 'matrix' to get the flickering tail effect
+    // {
+    //   "name": "ascii/matrix/flux",
+    //   "params": {
+    //     "sensitivity": 1.5,
+    //     "flicker_speed": 15.0
+    //   }
+    // },
     {
       "name": "ascii/matrix/matrix",
       "params": {
-        "sensitivity": 2.2
+        "sensitivity": 2.2,
       }
     },
+    // {
+    //   "name": "geo/topography",
+    //   "params": {
+    //     "sensitivity": 1.0,
+    //   }
+    // },
+
+    // --- STAGE 2: WARPS & FILTERS ---
     {
       "name": "warp/vortex",
       "params": {
         "sensitivity": 0.5,
-        "vortex_speed": 1.5,
+        "vortex_speed": 0.02,
         "vortex_arms": 4.0,
         "vortex_spin": 0.4,
         "vortex_center_size": 0.05,
         "vortex_fov": 0.05,
         "vortex_color_separation": 0.015,
-        "vortex_strobe_size": 0.4
+        "vortex_strobe_size": 0.4,
       }
-    }
+    },
+    {
+      "name": "filters/edge",
+      "params": {
+        "sensitivity": 0.2,
+      }
+    },
+    // {
+    //   "name": "warp/resonance",
+    //   "params": {
+    //     "sensitivity": 2.0,
+    //     "resonance_ripples": 10.0,
+    //   }
+    // },
+
   ],
 
+  // Globals are fallback uniforms if a stage doesn't define them in 'params'
   "globals": {
-    "rain_speed": 0.2,
-    "tail_length": 1.0,
-    "flicker_speed": 10.0,
-    "resonance_ripples": 100.0
+    "rain_speed": 0.2,       // Used by all matrix shaders
+    "tail_length": 1.0,      // Used by all matrix shaders
+    // "flicker_speed": 10.0,    // Only used by ascii/matrix/flux
   },
 
+  // Adjust to hide messy video edges (0.0 to 0.49)
   "crop": {
     "left": 0.0,
     "right": 0.0,
     "top": 0.0,
-    "bottom": 0.0
+    "bottom": 0.0,
   },
   
+  // Font Atlas Configuration
   "font_width": 2.0,
   "font_height": 4.0,
   "num_chars": 10.0,
   
+  // Sync timing
   "playback_fps": 30.0,
   "bpm_multiplier": 20.0,
 
   "audio": {
-    "bass_bin_start": 1,
-    "bass_bin_end": 3,
-    "mid_bin_start": 6,
-    "mid_bin_end": 22,
-    "treble_bin_start": 23,
-    "treble_bin_end": 100,
-    "smoothing_old": 0.7,
-    "smoothing_new": 0.3,
+    // FFT Configuration (Assuming 44.1kHz sample rate & 512 buffer = ~86Hz per bin)
+    "bass_bin_start": 1,     // ~86 Hz
+    "bass_bin_end": 3,       // ~258 Hz
+    "mid_bin_start": 6,      // ~516 Hz
+    "mid_bin_end": 22,       // ~1892 Hz
+    "treble_bin_start": 23,  // ~1978 Hz
+    "treble_bin_end": 100,   // ~8600 Hz
+    
+    // Temporal smoothing for audio reactivity
+    "smoothing_old": 0.7,    // Weight of previous frame
+    "smoothing_new": 0.3,    // Weight of current frame
+    
+    // Normalization factors (Higher = less reactive to that frequency band)
     "bass_norm_factor": 84.0,
     "mid_norm_factor": 290.0,
     "treble_norm_factor": 600.0,
-    "volume_norm_factor": 500.0
+    "volume_norm_factor": 500.0,
   }
 }
