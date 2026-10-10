@@ -7,14 +7,14 @@
       }
     },
     {
-      "name": "warp/resonance",
+      "name": "warp/vortex",
       "params": {
         "sensitivity": 0.5,
         "vortex_speed": 1.5,
         "vortex_arms": 4.0,
         "vortex_spin": 0.4,
         "vortex_center_size": 0.05,
-        "vortex_fov": 0.9,
+        "vortex_fov": 0.05,
         "vortex_color_separation": 0.015,
         "vortex_strobe_size": 0.4
       }

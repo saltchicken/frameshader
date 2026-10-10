@@ -103,10 +103,10 @@ fn main() {
     }
 
     let vertices: [f32; 20] = [
-         1.0,  1.0, 0.0,   1.0, 0.0,
-         1.0, -1.0, 0.0,   1.0, 1.0,
-        -1.0, -1.0, 0.0,   0.0, 1.0,
-        -1.0,  1.0, 0.0,   0.0, 0.0,
+         1.0,  1.0, 0.0,   1.0, 1.0, // Top Right
+         1.0, -1.0, 0.0,   1.0, 0.0, // Bottom Right
+        -1.0, -1.0, 0.0,   0.0, 0.0, // Bottom Left
+        -1.0,  1.0, 0.0,   0.0, 1.0, // Top Left
     ];
     let indices: [u32; 6] = [0, 1, 3, 1, 2, 3];
     let (mut vao, mut vbo, mut ebo) = (0, 0, 0);
@@ -421,6 +421,7 @@ fn main() {
                                 "charSize" => gl::Uniform2f(loc, current_config.font_width, current_config.font_height),
                                 "numChars" => gl::Uniform1f(loc, current_config.num_chars),
                                 "time" => gl::Uniform1f(loc, glfw.get_time() as f32),
+                                "is_first_pass" => gl::Uniform1i(loc, if is_first { 1 } else { 0 }),
                                 "crop" => {
                                     let (c_l, c_r, c_t, c_b) = current_config.crop.sanitize();
                                     gl::Uniform4f(loc, c_l, c_r, c_t, c_b);
