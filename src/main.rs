@@ -239,6 +239,7 @@ fn main() {
         ("Edge", include_str!("../shaders/frag/edge.frag")),
         ("VHS", include_str!("../shaders/frag/vhs.frag")),
         ("Halftone", include_str!("../shaders/frag/halftone.frag")),
+        ("Prism", include_str!("../shaders/frag/prism.frag")),
     ];
 
     let mut shader_programs = Vec::new();

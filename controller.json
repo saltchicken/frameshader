@@ -1,6 +1,6 @@
 {
   // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "halftone"
-  "mode": "ASCII",
+  "mode": "Prism",
 
   "crop": {
     "left": 20.0,
@@ -10,13 +10,13 @@
   },
   
   // Font Graphics Options
-  "font_width": 4.0,
-  "font_height": 8.0,
+  "font_width": 2.0,
+  "font_height": 4.0,
   "num_chars": 10.0,
   
   // Live parameters
   "playback_fps": 60.0,
-  "sensitivity": 2.5,
+  "sensitivity": 1.5,
 
   "rain_speed": 0.5,
   "tail_length": 1.5,
