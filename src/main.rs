@@ -111,8 +111,10 @@ fn main() {
     glfw.window_hint(glfw::WindowHint::ContextVersion(4, 6));
     glfw.window_hint(glfw::WindowHint::OpenGlProfile(glfw::OpenGlProfileHint::Core));
 
+    // Start as a standard window (you can maximize it and the shaders will now adapt correctly!)
     let (mut window, events) = glfw.create_window(1280, 720, "frameshader", glfw::WindowMode::Windowed)
         .expect("Failed to create GLFW window.");
+
     window.make_current();
     window.set_key_polling(true);
     glfw.set_swap_interval(glfw::SwapInterval::Sync(1));
@@ -316,8 +318,34 @@ fn main() {
         glfw.poll_events();
         
         for (_, event) in glfw::flush_messages(&events) {
-            if let glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) = event {
-                window.set_should_close(true);
+            match event {
+                glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
+                    window.set_should_close(true);
+                }
+                // Toggle fullscreen on F11
+                glfw::WindowEvent::Key(Key::F11, _, Action::Press, _) => {
+                    let is_fullscreen = window.with_window_mode(|mode| {
+                        match mode {
+                            glfw::WindowMode::Windowed => false,
+                            glfw::WindowMode::FullScreen(_) => true,
+                        }
+                    });
+
+                    if is_fullscreen {
+                        window.set_monitor(glfw::WindowMode::Windowed, 0, 0, 1280, 720, None);
+                    } else {
+                        glfw.with_primary_monitor(|_, m| {
+                            if let Some(monitor) = m {
+                                let mode = monitor.get_video_mode().unwrap();
+                                window.set_monitor(
+                                    glfw::WindowMode::FullScreen(monitor),
+                                    0, 0, mode.width, mode.height, Some(mode.refresh_rate)
+                                );
+                            }
+                        });
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -348,7 +376,10 @@ fn main() {
             println!("Config reloaded: Active Mode [{}], FPS: [{}]", current_config.mode, current_config.playback_fps);
         }
 
+        let (fb_width, fb_height) = window.get_framebuffer_size();
+
         unsafe {
+            gl::Viewport(0, 0, fb_width, fb_height);
             gl::ClearColor(0.1, 0.1, 0.1, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
         }
@@ -393,7 +424,9 @@ fn main() {
             
             if prog.loc_video_texture != -1 { gl::Uniform1i(prog.loc_video_texture, 0); }
             if prog.loc_font_atlas != -1 { gl::Uniform1i(prog.loc_font_atlas, 1); }
-            if prog.loc_resolution != -1 { gl::Uniform2f(prog.loc_resolution, cam_width as f32, cam_height as f32); }
+            
+            // Use fb_width and fb_height instead of cam_width and cam_height for correct aspect ratio scaling
+            if prog.loc_resolution != -1 { gl::Uniform2f(prog.loc_resolution, fb_width as f32, fb_height as f32); }
             
             // Use variables from config
             if prog.loc_char_size != -1 { gl::Uniform2f(prog.loc_char_size, current_config.font_width, current_config.font_height); }
