@@ -63,11 +63,9 @@ pub fn build_audio_stream(
     
     println!("Audio Client initialized.");
 
-    // Channel to offload samples from the audio thread to the FFT thread
     let (tx, rx) = bounded::<f32>(AUDIO_BUFFER_SIZE * 8);
     let sample_rate = config.sample_rate().0 as f32;
 
-    // Spawn dedicated FFT worker thread
     let state_clone = Arc::clone(&audio_state);
     thread::spawn(move || {
         run_fft_worker(rx, state_clone, shared_config, sample_rate);
@@ -96,7 +94,6 @@ where
         config,
         move |data: &[T], _: &_| {
             for sample in data {
-                // Non-blocking try_send ensures the audio thread never stalls
                 let _ = tx.try_send(sample.to_sample::<f32>());
             }
         },
@@ -189,22 +186,39 @@ fn run_fft_worker(
                 }
             }
 
-            let new_bass = if raw_bass > old_bass { raw_bass } else { old_bass * cfg.smoothing_old + raw_bass * cfg.smoothing_new };
+            // MODIFIED: Attack/Decay envelope for all frequency bands
+            let new_bass = if raw_bass > old_bass { 
+                old_bass * 0.3 + raw_bass * 0.7 
+            } else { 
+                old_bass * cfg.smoothing_old + raw_bass * cfg.smoothing_new 
+            };
             state.store_bass(new_bass);
 
             let old_mid = state.get_mid();
             let raw_mid = mid / cfg.mid_norm_factor;
-            let new_mid = if raw_mid > old_mid { raw_mid } else { old_mid * cfg.smoothing_old + raw_mid * cfg.smoothing_new };
+            let new_mid = if raw_mid > old_mid { 
+                old_mid * 0.3 + raw_mid * 0.7 
+            } else { 
+                old_mid * cfg.smoothing_old + raw_mid * cfg.smoothing_new 
+            };
             state.store_mid(new_mid);
 
             let old_treble = state.get_treble();
             let raw_treble = treble / cfg.treble_norm_factor;
-            let new_treble = if raw_treble > old_treble { raw_treble } else { old_treble * cfg.smoothing_old + raw_treble * cfg.smoothing_new };
+            let new_treble = if raw_treble > old_treble { 
+                old_treble * 0.3 + raw_treble * 0.7 
+            } else { 
+                old_treble * cfg.smoothing_old + raw_treble * cfg.smoothing_new 
+            };
             state.store_treble(new_treble);
 
             let old_volume = state.get_volume();
             let raw_volume = volume / cfg.volume_norm_factor;
-            let new_volume = if raw_volume > old_volume { raw_volume } else { old_volume * cfg.smoothing_old + raw_volume * cfg.smoothing_new };
+            let new_volume = if raw_volume > old_volume { 
+                old_volume * 0.3 + raw_volume * 0.7 
+            } else { 
+                old_volume * cfg.smoothing_old + raw_volume * cfg.smoothing_new 
+            };
             state.store_volume(new_volume);
 
             let raw_peak_freq = (peak_bin as f32 * sample_rate) / AUDIO_BUFFER_SIZE as f32;
