@@ -14,6 +14,9 @@ use serde::{Deserialize, Serialize};
 #[serde(default)] // Allows partial JSON files (missing fields will use default)
 struct ShaderConfig {
     mode: String,
+    font_width: f32,
+    font_height: f32,
+    num_chars: f32,
     playback_fps: f32,
     sensitivity: f32,
     rain_speed: f32,
@@ -25,6 +28,9 @@ impl Default for ShaderConfig {
     fn default() -> Self {
         Self {
             mode: "Flux".to_string(),
+            font_width: 8.0,
+            font_height: 16.0,
+            num_chars: 10.0,
             playback_fps: 30.0,
             sensitivity: 1.5,
             rain_speed: 0.4,
@@ -54,7 +60,7 @@ fn main() {
     glfw.window_hint(glfw::WindowHint::ContextVersion(4, 6));
     glfw.window_hint(glfw::WindowHint::OpenGlProfile(glfw::OpenGlProfileHint::Core));
 
-    let (mut window, events) = glfw.create_window(1280, 720, "Rust ASCII Shader (Live Config)", glfw::WindowMode::Windowed)
+    let (mut window, events) = glfw.create_window(1280, 720, "frameshader", glfw::WindowMode::Windowed)
         .expect("Failed to create GLFW window.");
     window.make_current();
     window.set_key_polling(true);
@@ -187,6 +193,11 @@ fn main() {
   // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux"
   "mode": "Flux",
   
+  // Font Graphics Options
+  "font_width": 8.0,
+  "font_height": 16.0,
+  "num_chars": 10.0,
+  
   // Live parameters
   "playback_fps": 30.0,
   "sensitivity": 1.5,
@@ -314,8 +325,12 @@ fn main() {
             if prog.loc_video_texture != -1 { gl::Uniform1i(prog.loc_video_texture, 0); }
             if prog.loc_font_atlas != -1 { gl::Uniform1i(prog.loc_font_atlas, 1); }
             if prog.loc_resolution != -1 { gl::Uniform2f(prog.loc_resolution, cam_width as f32, cam_height as f32); }
-            if prog.loc_char_size != -1 { gl::Uniform2f(prog.loc_char_size, 8.0, 16.0); }
-            if prog.loc_num_chars != -1 { gl::Uniform1f(prog.loc_num_chars, 10.0); }
+            
+            // --- UPDATED: Use variables from config ---
+            if prog.loc_char_size != -1 { gl::Uniform2f(prog.loc_char_size, current_config.font_width, current_config.font_height); }
+            if prog.loc_num_chars != -1 { gl::Uniform1f(prog.loc_num_chars, current_config.num_chars); }
+            // ------------------------------------------
+
             if prog.loc_time != -1 { gl::Uniform1f(prog.loc_time, glfw.get_time() as f32); }
 
             // Live Config Uniforms

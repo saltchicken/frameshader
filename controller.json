@@ -2,10 +2,15 @@
   // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux"
   "mode": "Flux",
   
+  // Font Graphics Options
+  "font_width": 2.0,
+  "font_height": 4.0,
+  "num_chars": 10.0,
+  
   // Live parameters
-  "playback_fps": 10.0,
+  "playback_fps": 30.0,
   "sensitivity": 1.5,
-  "rain_speed": 0.4,
+  "rain_speed": 0.2,
   "tail_length": 1.3,
   "flicker_speed": 15.0
 
