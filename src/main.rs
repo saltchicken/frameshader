@@ -209,12 +209,12 @@ fn main() {
     "rain_speed": 0.4,
     "tail_length": 0.3,
     "flicker_speed": 15.0,
-    "resonance_ripples": 30.0
+    "resonance_ripples": 30.0,
+    "font_width": 8.0,
+    "font_height": 16.0,
+    "num_chars": 10.0
   },
   "crop": { "left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0 },
-  "font_width": 8.0,
-  "font_height": 16.0,
-  "num_chars": 10.0,
   "playback_fps": 30.0,
   "bpm_multiplier": 15.0,
   "audio": {
@@ -418,14 +418,30 @@ fn main() {
                                 "videoTexture" => gl::Uniform1i(loc, 0),
                                 "fontAtlas" => gl::Uniform1i(loc, 1),
                                 "resolution" => gl::Uniform2f(loc, fb_width as f32, fb_height as f32),
-                                "charSize" => gl::Uniform2f(loc, current_config.font_width, current_config.font_height),
-                                "numChars" => gl::Uniform1f(loc, current_config.num_chars),
+                                
+                                "charSize" => {
+                                    let w = stage.params.get("font_width")
+                                        .or_else(|| current_config.globals.get("font_width"))
+                                        .unwrap_or(&8.0);
+                                    let h = stage.params.get("font_height")
+                                        .or_else(|| current_config.globals.get("font_height"))
+                                        .unwrap_or(&16.0);
+                                    gl::Uniform2f(loc, *w, *h);
+                                },
+                                "numChars" => {
+                                    let n = stage.params.get("num_chars")
+                                        .or_else(|| current_config.globals.get("num_chars"))
+                                        .unwrap_or(&10.0);
+                                    gl::Uniform1f(loc, *n);
+                                },
+                                
                                 "time" => gl::Uniform1f(loc, glfw.get_time() as f32),
                                 "is_first_pass" => gl::Uniform1i(loc, if is_first { 1 } else { 0 }),
                                 "crop" => {
                                     let (c_l, c_r, c_t, c_b) = current_config.crop.sanitize();
                                     gl::Uniform4f(loc, c_l, c_r, c_t, c_b);
                                 },
+                                
                                 // 2. Audio variables
                                 "audio_bass" => gl::Uniform1f(loc, audio_state.get_bass()),
                                 "audio_mid" => gl::Uniform1f(loc, audio_state.get_mid()),
