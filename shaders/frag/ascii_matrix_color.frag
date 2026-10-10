@@ -12,6 +12,7 @@ uniform float time;
 // --- MODIFIED ---
 uniform float rain_speed = 0.3;   // Now a uniform
 uniform float tail_length = 0.25; // Now a uniform
+uniform float sensitivity = 1.5;  // Added uniform for brightness scaling
 
 // --- AUDIO UNIFORMS ---
 uniform float audio_bass;
@@ -53,9 +54,10 @@ void main()
         }
     }
 
-    float time_slice = floor(time * 5.0);
-    vec2 timeOffset = vec2(sin(time_slice * 12.34), cos(time_slice * 56.78)) * 100.0;
-    float charIndex = floor(random(charCoord.xy + timeOffset) * numChars);
+    // Convert base color to brightness to pick a stable character
+    float brightness = dot(baseColor, vec3(0.2126, 0.7152, 0.0722));
+    float boostedBrightness = clamp(brightness * sensitivity, 0.0, 1.0);
+    float charIndex = floor(boostedBrightness * (numChars - 1.0));
 
     vec2 intraCharUV = fract(TexCoord * characterGrid);
     float atlasX = (charIndex + intraCharUV.x) / numChars;

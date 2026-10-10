@@ -26,7 +26,6 @@ float random(vec2 st) {
 
 void main()
 {
-    // ... (Sections 1, 2, and 3 for calculating rainColor are the same) ...
     vec2 characterGrid = resolution / charSize;
     vec2 charCoord = floor(TexCoord * characterGrid);
 
@@ -48,31 +47,29 @@ void main()
         }
     }
     
-    // ... (Section 4 for selecting a character is the same) ...
-    float time_slice = floor(time * 5.0);
-    vec2 timeOffset = vec2(sin(time_slice * 12.34), cos(time_slice * 56.78)) * 100.0;
-    float charIndex = floor(random(charCoord.xy + timeOffset) * numChars);
-
     // --- MODIFIED FINAL COLOR CALCULATION ---
 
-    // 1. Sample the font character shape
+    // 1. Get the camera feed color for this spot
+    vec2 videoUV = (charCoord + 0.5) / characterGrid;
+    vec4 videoColor = texture(videoTexture, videoUV);
+
+    // 2. Convert the camera color to a single brightness value (0.0 to 1.0)
+    float brightness = dot(videoColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+    float boostedBrightness = clamp(brightness * sensitivity, 0.0, 1.0);
+
+    // 3. Map brightness directly to the character index to eliminate flickering
+    float charIndex = floor(boostedBrightness * (numChars - 1.0));
+
+    // 4. Sample the font character shape
     vec2 intraCharUV = fract(TexCoord * characterGrid);
     float atlasX = (charIndex + intraCharUV.x) / numChars;
     vec2 fontUV = vec2(atlasX, intraCharUV.y);
     float fontMask = texture(fontAtlas, fontUV).r;
 
-    // 2. Get the camera feed color for this spot
-    vec2 videoUV = (charCoord + 0.5) / characterGrid;
-    vec4 videoColor = texture(videoTexture, videoUV);
-
-    // 3. Convert the camera color to a single brightness value (0.0 to 1.0)
-    float brightness = dot(videoColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-    float boostedBrightness = clamp(brightness * sensitivity, 0.0, 1.0);
-
-    // 4. Create the final color
+    // 5. Create the final color
     // We multiply the PURE GREEN rainColor by the camera's BRIGHTNESS
     vec3 finalColor = rainColor * boostedBrightness;
 
-    // 5. Apply the character mask
+    // 6. Apply the character mask
     FragColor = vec4(finalColor, 1.0) * fontMask;
 }
