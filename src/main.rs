@@ -240,6 +240,9 @@ fn main() {
         ("VHS", include_str!("../shaders/frag/vhs.frag")),
         ("Halftone", include_str!("../shaders/frag/halftone.frag")),
         ("Prism", include_str!("../shaders/frag/prism.frag")),
+        ("GlitchSort", include_str!("../shaders/frag/glitch_sort.frag")),
+        ("Vortex", include_str!("../shaders/frag/vortex.frag")),
+        ("Topography", include_str!("../shaders/frag/topography.frag")),
     ];
 
     let mut shader_programs = Vec::new();
