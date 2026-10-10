@@ -148,6 +148,13 @@ fn main() {
                 loc_tail_length: gl::GetUniformLocation(id, c"tail_length".as_ptr()),
                 loc_flicker_speed: gl::GetUniformLocation(id, c"flicker_speed".as_ptr()),
                 loc_resonance_ripples: gl::GetUniformLocation(id, c"resonance_ripples".as_ptr()),
+                loc_vortex_speed: gl::GetUniformLocation(id, c"vortex_speed".as_ptr()),
+                loc_vortex_arms: gl::GetUniformLocation(id, c"vortex_arms".as_ptr()),
+                loc_vortex_spin: gl::GetUniformLocation(id, c"vortex_spin".as_ptr()),
+                loc_vortex_center_size: gl::GetUniformLocation(id, c"vortex_center_size".as_ptr()),
+                loc_vortex_fov: gl::GetUniformLocation(id, c"vortex_fov".as_ptr()),
+                loc_vortex_color_separation: gl::GetUniformLocation(id, c"vortex_color_separation".as_ptr()),
+                loc_vortex_strobe_size: gl::GetUniformLocation(id, c"vortex_strobe_size".as_ptr()),
                 loc_audio_bass: gl::GetUniformLocation(id, c"audio_bass".as_ptr()),
                 loc_audio_mid: gl::GetUniformLocation(id, c"audio_mid".as_ptr()),
                 loc_audio_treble: gl::GetUniformLocation(id, c"audio_treble".as_ptr()),
@@ -193,6 +200,13 @@ fn main() {
   "tail_length": 0.3,
   "flicker_speed": 15.0,
   "resonance_ripples": 30.0,
+  "vortex_speed": 1.5,
+  "vortex_arms": 4.0,
+  "vortex_spin": 0.4,
+  "vortex_center_size": 0.05,
+  "vortex_fov": 0.5,
+  "vortex_color_separation": 0.015,
+  "vortex_strobe_size": 0.4,
   
   // Audio reactive parameters
   "audio": {
@@ -300,7 +314,7 @@ fn main() {
             (current_bpm / 60.0) * current_config.bpm_multiplier 
         } else {
             current_config.playback_fps
-        };
+        } ;
 
         let safe_fps = if target_fps > 0.1 { target_fps } else { 0.1 };
         let frame_duration = Duration::from_secs_f32(1.0 / safe_fps);
@@ -362,6 +376,13 @@ fn main() {
             if prog.loc_tail_length != -1 { gl::Uniform1f(prog.loc_tail_length, current_config.tail_length); }
             if prog.loc_flicker_speed != -1 { gl::Uniform1f(prog.loc_flicker_speed, current_config.flicker_speed); }
             if prog.loc_resonance_ripples != -1 { gl::Uniform1f(prog.loc_resonance_ripples, current_config.resonance_ripples); }
+            if prog.loc_vortex_speed != -1 { gl::Uniform1f(prog.loc_vortex_speed, current_config.vortex_speed); }
+            if prog.loc_vortex_arms != -1 { gl::Uniform1f(prog.loc_vortex_arms, current_config.vortex_arms); }
+            if prog.loc_vortex_spin != -1 { gl::Uniform1f(prog.loc_vortex_spin, current_config.vortex_spin); }
+            if prog.loc_vortex_center_size != -1 { gl::Uniform1f(prog.loc_vortex_center_size, current_config.vortex_center_size); }
+            if prog.loc_vortex_fov != -1 { gl::Uniform1f(prog.loc_vortex_fov, current_config.vortex_fov); }
+            if prog.loc_vortex_color_separation != -1 { gl::Uniform1f(prog.loc_vortex_color_separation, current_config.vortex_color_separation); }
+            if prog.loc_vortex_strobe_size != -1 { gl::Uniform1f(prog.loc_vortex_strobe_size, current_config.vortex_strobe_size); }
             
             if prog.loc_audio_bass != -1 { gl::Uniform1f(prog.loc_audio_bass, get_bass()); }
             if prog.loc_audio_mid != -1 { gl::Uniform1f(prog.loc_audio_mid, get_mid()); }

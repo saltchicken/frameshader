@@ -77,6 +77,13 @@ pub struct ShaderConfig {
     pub tail_length: f32,
     pub flicker_speed: f32,
     pub resonance_ripples: f32,
+    pub vortex_speed: f32,
+    pub vortex_arms: f32,
+    pub vortex_spin: f32,
+    pub vortex_center_size: f32,
+    pub vortex_fov: f32,
+    pub vortex_color_separation: f32,
+    pub vortex_strobe_size: f32,
     pub audio: AudioConfig,
 }
 
@@ -95,6 +102,13 @@ impl Default for ShaderConfig {
             tail_length: 0.3,
             flicker_speed: 15.0,
             resonance_ripples: 30.0,
+            vortex_speed: 1.5,
+            vortex_arms: 4.0,
+            vortex_spin: 0.4,
+            vortex_center_size: 0.05,
+            vortex_fov: 0.5,
+            vortex_color_separation: 0.015,
+            vortex_strobe_size: 0.4,
             audio: AudioConfig::default(),
         }
     }

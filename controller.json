@@ -1,6 +1,6 @@
 {
   // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "halftone", "Prism", "GlitchSort", "Vortex", "Topography", "Resonance"
-  "mode": "Topography",
+  "mode": "Vortex",
 
   "crop": {
     "left": 0.0,
@@ -16,13 +16,21 @@
   
   // Live parameters
   "playback_fps": 30.0,
-  "bpm_multiplier": 5.0,
+  "bpm_multiplier": 20.0,
   "sensitivity": 1.5,
 
   "rain_speed": 0.2,
   "tail_length": 1.0,
   "flicker_speed": 10.0,
   "resonance_ripples": 100.0,
+
+  "vortex_speed": 1.5,
+  "vortex_arms": 4.0,
+  "vortex_spin": 0.4,
+  "vortex_center_size": 0.05,
+  "vortex_fov": 0.9,
+  "vortex_color_separation": 0.015,
+  "vortex_strobe_size": 0.4,
 
   // Audio reactive parameters
   "audio": {
@@ -34,9 +42,9 @@
     "treble_bin_end": 100,
     "smoothing_old": 0.7,
     "smoothing_new": 0.3,
-    "bass_norm_factor": 25.0,
-    "mid_norm_factor": 200.0,
-    "treble_norm_factor": 50.0,
+    "bass_norm_factor": 84.0,
+    "mid_norm_factor": 290.0,
+    "treble_norm_factor": 600.0,
     "volume_norm_factor": 500.0
   }
 }
