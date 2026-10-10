@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::fs;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)]
@@ -115,7 +114,7 @@ impl Default for ShaderConfig {
 }
 
 pub fn load_config(path: &str) -> ShaderConfig {
-    if let Ok(content) = fs::read_to_string(path) {
+    if let Ok(content) = std::fs::read_to_string(path) {
         match json5::from_str::<ShaderConfig>(&content) {
             Ok(config) => return config,
             Err(e) => eprintln!("Error parsing controller.json: {} - keeping previous state.", e),

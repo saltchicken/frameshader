@@ -3,7 +3,7 @@ mod config;
 mod shader;
 
 use glfw::{Action, Context, Key};
-use opencv::{prelude::*, videoio, imgproc, core};
+use opencv::{prelude::*, videoio};
 use std::env;
 use std::ptr;
 use std::sync::mpsc;
@@ -12,9 +12,16 @@ use std::time::{Duration, Instant};
 use std::sync::{Arc, RwLock};
 use notify_debouncer_mini::{new_debouncer, notify::RecursiveMode};
 
-use audio::{build_audio_stream, get_bass, get_bpm, get_mid, get_peak_freq, get_treble, get_volume};
+use audio::{build_audio_stream, AudioState};
 use config::load_config;
 use shader::{compile_shader_program, ShaderProgram};
+
+struct ShaderDef {
+    name: String,
+    file_name: String,
+    static_src: &'static str,
+    program: Option<ShaderProgram>,
+}
 
 fn main() {
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
@@ -32,24 +39,36 @@ fn main() {
 
     let args: Vec<String> = env::args().collect();
     let mut is_file = false;
+    let mut has_camera = true;
 
+    // Graceful camera degradation (Fixed unwrap for default capture)
     let mut cam = if args.len() > 1 {
         let input = &args[1];
         if let Ok(cam_index) = input.parse::<i32>() {
-            videoio::VideoCapture::new(cam_index, videoio::CAP_ANY).expect("Failed to open camera")
+            videoio::VideoCapture::new(cam_index, videoio::CAP_ANY)
+                .unwrap_or_else(|_| videoio::VideoCapture::default().unwrap())
         } else {
             is_file = true;
-            videoio::VideoCapture::from_file(input, videoio::CAP_ANY).expect("Failed to open video file")
+            videoio::VideoCapture::from_file(input, videoio::CAP_ANY)
+                .unwrap_or_else(|_| videoio::VideoCapture::default().unwrap())
         }
     } else {
-        videoio::VideoCapture::new(0, videoio::CAP_ANY).expect("Failed to open camera")
+        videoio::VideoCapture::new(0, videoio::CAP_ANY)
+            .unwrap_or_else(|_| videoio::VideoCapture::default().unwrap())
     };
 
-    let cam_width = cam.get(videoio::CAP_PROP_FRAME_WIDTH).unwrap() as i32;
-    let cam_height = cam.get(videoio::CAP_PROP_FRAME_HEIGHT).unwrap() as i32;
-    let fps = cam.get(videoio::CAP_PROP_FPS).unwrap();
+    if !cam.is_opened().unwrap_or(false) {
+        eprintln!("Warning: No input feed available. Running in shader-only mode.");
+        has_camera = false;
+    }
+
+    let cam_width = if has_camera { cam.get(videoio::CAP_PROP_FRAME_WIDTH).unwrap_or(1280.0) as i32 } else { 1280 };
+    let cam_height = if has_camera { cam.get(videoio::CAP_PROP_FRAME_HEIGHT).unwrap_or(720.0) as i32 } else { 720 };
+    let fps = if has_camera { cam.get(videoio::CAP_PROP_FPS).unwrap_or(30.0) } else { 30.0 };
     
-    println!("Input opened successfully at {}x{} ({} fps)", cam_width, cam_height, fps);
+    if has_camera {
+        println!("Input opened successfully at {}x{} ({} fps)", cam_width, cam_height, fps);
+    }
 
     let vertices: [f32; 20] = [
          1.0,  1.0, 0.0,   1.0, 0.0,
@@ -100,78 +119,61 @@ fn main() {
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
         gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
+        
+        // Using native OpenCV BGR format directly to bypass CPU conversion
         gl::TexImage2D(
             gl::TEXTURE_2D, 0, gl::RGB as i32, 
             cam_width as i32, cam_height as i32, 
-            0, gl::RGB, gl::UNSIGNED_BYTE, ptr::null()
+            0, gl::BGR, gl::UNSIGNED_BYTE, ptr::null()
         );
     }
 
     let vert_src = include_str!("../shaders/vert/shader.vert");
-    let fragment_sources = [
-        ("ASCII", include_str!("../shaders/frag/ascii.frag")),
-        ("Matrix", include_str!("../shaders/frag/ascii_matrix.frag")),
-        ("Color", include_str!("../shaders/frag/ascii_matrix_color.frag")),
-        ("Flux", include_str!("../shaders/frag/ascii_matrix_flux.frag")),
-        ("CRT", include_str!("../shaders/frag/crt.frag")),
-        ("Edge", include_str!("../shaders/frag/edge.frag")),
-        ("VHS", include_str!("../shaders/frag/vhs.frag")),
-        ("Halftone", include_str!("../shaders/frag/halftone.frag")),
-        ("Prism", include_str!("../shaders/frag/prism.frag")),
-        ("GlitchSort", include_str!("../shaders/frag/glitch_sort.frag")),
-        ("Vortex", include_str!("../shaders/frag/vortex.frag")),
-        ("Topography", include_str!("../shaders/frag/topography.frag")),
-        ("Comic", include_str!("../shaders/frag/comic.frag")),
-        ("Thermal", include_str!("../shaders/frag/thermal.frag")),
-        ("Paint", include_str!("../shaders/frag/paint.frag")),
-        ("NightVision", include_str!("../shaders/frag/nightvision.frag")),
-        ("Dither", include_str!("../shaders/frag/dither.frag")),
-        ("Resonance", include_str!("../shaders/frag/resonance.frag")),
+    
+    let mut shader_defs = vec![
+        ShaderDef { name: "ASCII".into(), file_name: "ascii.frag".into(), static_src: include_str!("../shaders/frag/ascii.frag"), program: None },
+        ShaderDef { name: "Matrix".into(), file_name: "ascii_matrix.frag".into(), static_src: include_str!("../shaders/frag/ascii_matrix.frag"), program: None },
+        ShaderDef { name: "Color".into(), file_name: "ascii_matrix_color.frag".into(), static_src: include_str!("../shaders/frag/ascii_matrix_color.frag"), program: None },
+        // ShaderDef { name: "Flux".into(), file_name: "ascii_matrix_flux.frag".into(), static_src: include_str!("../shaders/frag/ascii_matrix_flux.frag"), program: None },
+        // ShaderDef { name: "CRT".into(), file_name: "crt.frag".into(), static_src: include_str!("../shaders/frag/crt.frag"), program: None },
+        // ShaderDef { name: "Edge".into(), file_name: "edge.frag".into(), static_src: include_str!("../shaders/frag/edge.frag"), program: None },
+        // ShaderDef { name: "VHS".into(), file_name: "vhs.frag".into(), static_src: include_str!("../shaders/frag/vhs.frag"), program: None },
+        // ShaderDef { name: "Halftone".into(), file_name: "halftone.frag".into(), static_src: include_str!("../shaders/frag/halftone.frag"), program: None },
+        // ShaderDef { name: "Prism".into(), file_name: "prism.frag".into(), static_src: include_str!("../shaders/frag/prism.frag"), program: None },
+        // ShaderDef { name: "GlitchSort".into(), file_name: "glitch_sort.frag".into(), static_src: include_str!("../shaders/frag/glitch_sort.frag"), program: None },
+        ShaderDef { name: "Vortex".into(), file_name: "vortex.frag".into(), static_src: include_str!("../shaders/frag/vortex.frag"), program: None },
+        // ShaderDef { name: "Topography".into(), file_name: "topography.frag".into(), static_src: include_str!("../shaders/frag/topography.frag"), program: None },
+        // ShaderDef { name: "Comic".into(), file_name: "comic.frag".into(), static_src: include_str!("../shaders/frag/comic.frag"), program: None },
+        // ShaderDef { name: "Thermal".into(), file_name: "thermal.frag".into(), static_src: include_str!("../shaders/frag/thermal.frag"), program: None },
+        // ShaderDef { name: "Paint".into(), file_name: "paint.frag".into(), static_src: include_str!("../shaders/frag/paint.frag"), program: None },
+        // ShaderDef { name: "NightVision".into(), file_name: "nightvision.frag".into(), static_src: include_str!("../shaders/frag/nightvision.frag"), program: None },
+        // ShaderDef { name: "Dither".into(), file_name: "dither.frag".into(), static_src: include_str!("../shaders/frag/dither.frag"), program: None },
+        // ShaderDef { name: "Resonance".into(), file_name: "resonance.frag".into(), static_src: include_str!("../shaders/frag/resonance.frag"), program: None },
     ];
 
-    let mut shader_programs = Vec::new();
-    for (name, frag_src) in fragment_sources.iter() {
-        println!("Compiling {}...", name);
+    for def in &mut shader_defs {
+        let mut loaded_src = def.static_src.to_string();
         
-        let id = compile_shader_program(vert_src, frag_src);
-        unsafe {
-            shader_programs.push(ShaderProgram {
-                id,
-                loc_video_texture: gl::GetUniformLocation(id, c"videoTexture".as_ptr()),
-                loc_font_atlas: gl::GetUniformLocation(id, c"fontAtlas".as_ptr()),
-                loc_resolution: gl::GetUniformLocation(id, c"resolution".as_ptr()),
-                loc_char_size: gl::GetUniformLocation(id, c"charSize".as_ptr()),
-                loc_num_chars: gl::GetUniformLocation(id, c"numChars".as_ptr()),
-                loc_sensitivity: gl::GetUniformLocation(id, c"sensitivity".as_ptr()),
-                loc_time: gl::GetUniformLocation(id, c"time".as_ptr()),
-                loc_rain_speed: gl::GetUniformLocation(id, c"rain_speed".as_ptr()),
-                loc_tail_length: gl::GetUniformLocation(id, c"tail_length".as_ptr()),
-                loc_flicker_speed: gl::GetUniformLocation(id, c"flicker_speed".as_ptr()),
-                loc_resonance_ripples: gl::GetUniformLocation(id, c"resonance_ripples".as_ptr()),
-                loc_vortex_speed: gl::GetUniformLocation(id, c"vortex_speed".as_ptr()),
-                loc_vortex_arms: gl::GetUniformLocation(id, c"vortex_arms".as_ptr()),
-                loc_vortex_spin: gl::GetUniformLocation(id, c"vortex_spin".as_ptr()),
-                loc_vortex_center_size: gl::GetUniformLocation(id, c"vortex_center_size".as_ptr()),
-                loc_vortex_fov: gl::GetUniformLocation(id, c"vortex_fov".as_ptr()),
-                loc_vortex_color_separation: gl::GetUniformLocation(id, c"vortex_color_separation".as_ptr()),
-                loc_vortex_strobe_size: gl::GetUniformLocation(id, c"vortex_strobe_size".as_ptr()),
-                loc_audio_bass: gl::GetUniformLocation(id, c"audio_bass".as_ptr()),
-                loc_audio_mid: gl::GetUniformLocation(id, c"audio_mid".as_ptr()),
-                loc_audio_treble: gl::GetUniformLocation(id, c"audio_treble".as_ptr()),
-                loc_audio_volume: gl::GetUniformLocation(id, c"audio_volume".as_ptr()),
-                loc_audio_peak_freq: gl::GetUniformLocation(id, c"audio_peak_freq".as_ptr()),
-                loc_crop: gl::GetUniformLocation(id, c"crop".as_ptr()),
-            });
+        {
+            let path = format!("shaders/frag/{}", def.file_name);
+            if let Ok(src) = fs::read_to_string(&path) {
+                loaded_src = src;
+            }
+        }
+
+        if let Some(prog) = compile_shader_program(vert_src, &loaded_src) {
+            def.program = Some(prog);
+        } else {
+            eprintln!("Warning: Failed to compile {} initially.", def.name);
         }
     }
 
-    let mut frame = core::Mat::default();
-    let mut rgb_frame = core::Mat::default();
+    let mut frame = opencv::core::Mat::default();
 
     let config_path = "controller.json";
     let (tx, rx) = mpsc::channel();
     
-    let mut debouncer = new_debouncer(Duration::from_millis(250), tx)
+    let mut debouncer = new_debouncer(Duration::from_millis(150), tx)
         .expect("Failed to initialize file watcher debouncer");
     
     if !std::path::Path::new(config_path).exists() {
@@ -228,16 +230,21 @@ fn main() {
     }
     
     debouncer.watcher().watch(std::path::Path::new("."), RecursiveMode::NonRecursive)
-        .expect("Failed to watch directory");
+        .expect("Failed to watch top level directory");
+    
+    debouncer.watcher().watch(std::path::Path::new("shaders/frag"), RecursiveMode::NonRecursive)
+        .expect("Failed to watch shaders directory");
 
     let mut current_config = load_config(config_path);
-    let mut current_mode = get_mode_index(&current_config.mode, &fragment_sources);
+    let mut current_mode = get_mode_index(&current_config.mode, &shader_defs);
     
     let shared_audio_config = Arc::new(RwLock::new(current_config.audio.clone()));
-    let _audio_stream = build_audio_stream(Arc::clone(&shared_audio_config))
-        .expect("Failed to start audio stream");
+    let audio_state = Arc::new(AudioState::default());
+
+    let _audio_stream = build_audio_stream(Arc::clone(&shared_audio_config), Arc::clone(&audio_state))
+        .map_err(|e| eprintln!("Warning: Failed to start audio stream. ({})", e)).ok();
     
-    println!("Watching controller.json for live updates...");
+    println!("Watching controller.json & shaders/ for live updates...");
 
     let mut last_video_update = Instant::now();
 
@@ -283,6 +290,24 @@ fn main() {
                         if event.path.ends_with(config_path) {
                             config_changed = true;
                         }
+                        
+                        // Shader Hot Reloading Detection
+                        if let Some(ext) = event.path.extension() {
+                            if ext == "frag" {
+                                if let Some(file_name) = event.path.file_name().and_then(|s| s.to_str()) {
+                                    for def in &mut shader_defs {
+                                        if def.file_name == file_name {
+                                            if let Ok(src) = fs::read_to_string(&event.path) {
+                                                if let Some(new_prog) = compile_shader_program(vert_src, &src) {
+                                                    def.program = Some(new_prog);
+                                                    println!("Hot-reloaded shader: {}", def.name);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 Err(e) => eprintln!("Watcher error: {:?}", e),
@@ -291,7 +316,7 @@ fn main() {
 
         if config_changed {
             current_config = load_config(config_path);
-            current_mode = get_mode_index(&current_config.mode, &fragment_sources);
+            current_mode = get_mode_index(&current_config.mode, &shader_defs);
             
             if let Ok(mut lock) = shared_audio_config.write() {
                 *lock = current_config.audio.clone();
@@ -308,7 +333,7 @@ fn main() {
             gl::Clear(gl::COLOR_BUFFER_BIT);
         }
 
-        let current_bpm = get_bpm();
+        let current_bpm = audio_state.get_bpm();
 
         let target_fps = if current_bpm > 0.0 {
             (current_bpm / 60.0) * current_config.bpm_multiplier 
@@ -321,85 +346,80 @@ fn main() {
         let mut update_texture = false;
 
         if last_video_update.elapsed() >= frame_duration {
-            if cam.read(&mut frame).unwrap_or(false) && !frame.empty() {
-                imgproc::cvt_color_def(&frame, &mut rgb_frame, imgproc::COLOR_BGR2RGB).unwrap();
-                update_texture = true;
-                last_video_update = Instant::now();
-            } else if is_file {
-                cam.set(videoio::CAP_PROP_POS_FRAMES, 0.0).unwrap();
-            } else {
-                eprintln!("Camera feed lost!");
-                break;
+            if has_camera {
+                if cam.read(&mut frame).unwrap_or(false) && !frame.empty() {
+                    // CPU Color conversion eliminated entirely
+                    update_texture = true;
+                    last_video_update = Instant::now();
+                } else if is_file {
+                    cam.set(videoio::CAP_PROP_POS_FRAMES, 0.0).unwrap_or_default();
+                }
             }
         }
 
-        let prog = &shader_programs[current_mode];
+        // Fallback gracefully if the active shader failed to compile
+        if let Some(prog) = &shader_defs[current_mode].program {
+            unsafe {
+                gl::ActiveTexture(gl::TEXTURE0);
+                gl::BindTexture(gl::TEXTURE_2D, video_texture);
+                
+                if update_texture {
+                    // Upload native OpenCV BGR frame directly to GPU
+                    gl::TexSubImage2D(
+                        gl::TEXTURE_2D, 0, 0, 0, 
+                        cam_width, cam_height, 
+                        gl::BGR, gl::UNSIGNED_BYTE, 
+                        frame.data() as *const _
+                    );
+                }
 
-        unsafe {
-            gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, video_texture);
-            
-            if update_texture {
-                gl::TexSubImage2D(
-                    gl::TEXTURE_2D, 0, 0, 0, 
-                    cam_width, cam_height, 
-                    gl::RGB, gl::UNSIGNED_BYTE, 
-                    rgb_frame.data() as *const _
-                );
+                gl::UseProgram(prog.id);
+                
+                // HashMap-driven Uniform Dispatch
+                for (name, &loc) in &prog.uniforms {
+                    match name.as_str() {
+                        "videoTexture" => gl::Uniform1i(loc, 0),
+                        "fontAtlas" => gl::Uniform1i(loc, 1),
+                        "resolution" => gl::Uniform2f(loc, fb_width as f32, fb_height as f32),
+                        "charSize" => gl::Uniform2f(loc, current_config.font_width, current_config.font_height),
+                        "numChars" => gl::Uniform1f(loc, current_config.num_chars),
+                        "time" => gl::Uniform1f(loc, glfw.get_time() as f32),
+                        "crop" => {
+                            let (c_l, c_r, c_t, c_b) = current_config.crop.sanitize();
+                            gl::Uniform4f(loc, c_l, c_r, c_t, c_b);
+                        },
+                        "sensitivity" => gl::Uniform1f(loc, current_config.sensitivity),
+                        "rain_speed" => gl::Uniform1f(loc, current_config.rain_speed),
+                        "tail_length" => gl::Uniform1f(loc, current_config.tail_length),
+                        "flicker_speed" => gl::Uniform1f(loc, current_config.flicker_speed),
+                        "resonance_ripples" => gl::Uniform1f(loc, current_config.resonance_ripples),
+                        "vortex_speed" => gl::Uniform1f(loc, current_config.vortex_speed),
+                        "vortex_arms" => gl::Uniform1f(loc, current_config.vortex_arms),
+                        "vortex_spin" => gl::Uniform1f(loc, current_config.vortex_spin),
+                        "vortex_center_size" => gl::Uniform1f(loc, current_config.vortex_center_size),
+                        "vortex_fov" => gl::Uniform1f(loc, current_config.vortex_fov),
+                        "vortex_color_separation" => gl::Uniform1f(loc, current_config.vortex_color_separation),
+                        "vortex_strobe_size" => gl::Uniform1f(loc, current_config.vortex_strobe_size),
+                        "audio_bass" => gl::Uniform1f(loc, audio_state.get_bass()),
+                        "audio_mid" => gl::Uniform1f(loc, audio_state.get_mid()),
+                        "audio_treble" => gl::Uniform1f(loc, audio_state.get_treble()),
+                        "audio_volume" => gl::Uniform1f(loc, audio_state.get_volume()),
+                        "audio_peak_freq" => gl::Uniform1f(loc, audio_state.get_peak_freq()),
+                        _ => {} // Ignore unexpected uniforms gracefully
+                    }
+                }
+
+                gl::BindVertexArray(vao);
+                gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
             }
-
-            gl::UseProgram(prog.id);
-            
-            if prog.loc_video_texture != -1 { gl::Uniform1i(prog.loc_video_texture, 0); }
-            if prog.loc_font_atlas != -1 { gl::Uniform1i(prog.loc_font_atlas, 1); }
-            
-            if prog.loc_resolution != -1 { gl::Uniform2f(prog.loc_resolution, fb_width as f32, fb_height as f32); }
-            
-            if prog.loc_char_size != -1 { gl::Uniform2f(prog.loc_char_size, current_config.font_width, current_config.font_height); }
-            if prog.loc_num_chars != -1 { gl::Uniform1f(prog.loc_num_chars, current_config.num_chars); }
-
-            if prog.loc_time != -1 { gl::Uniform1f(prog.loc_time, glfw.get_time() as f32); }
-
-            if prog.loc_crop != -1 {
-                let (c_l, c_r, c_t, c_b) = current_config.crop.sanitize();
-                gl::Uniform4f(
-                    prog.loc_crop,
-                    c_l,
-                    c_r,
-                    c_t,
-                    c_b
-                );
-            }
-            
-            if prog.loc_sensitivity != -1 { gl::Uniform1f(prog.loc_sensitivity, current_config.sensitivity); }
-            if prog.loc_rain_speed != -1 { gl::Uniform1f(prog.loc_rain_speed, current_config.rain_speed); }
-            if prog.loc_tail_length != -1 { gl::Uniform1f(prog.loc_tail_length, current_config.tail_length); }
-            if prog.loc_flicker_speed != -1 { gl::Uniform1f(prog.loc_flicker_speed, current_config.flicker_speed); }
-            if prog.loc_resonance_ripples != -1 { gl::Uniform1f(prog.loc_resonance_ripples, current_config.resonance_ripples); }
-            if prog.loc_vortex_speed != -1 { gl::Uniform1f(prog.loc_vortex_speed, current_config.vortex_speed); }
-            if prog.loc_vortex_arms != -1 { gl::Uniform1f(prog.loc_vortex_arms, current_config.vortex_arms); }
-            if prog.loc_vortex_spin != -1 { gl::Uniform1f(prog.loc_vortex_spin, current_config.vortex_spin); }
-            if prog.loc_vortex_center_size != -1 { gl::Uniform1f(prog.loc_vortex_center_size, current_config.vortex_center_size); }
-            if prog.loc_vortex_fov != -1 { gl::Uniform1f(prog.loc_vortex_fov, current_config.vortex_fov); }
-            if prog.loc_vortex_color_separation != -1 { gl::Uniform1f(prog.loc_vortex_color_separation, current_config.vortex_color_separation); }
-            if prog.loc_vortex_strobe_size != -1 { gl::Uniform1f(prog.loc_vortex_strobe_size, current_config.vortex_strobe_size); }
-            
-            if prog.loc_audio_bass != -1 { gl::Uniform1f(prog.loc_audio_bass, get_bass()); }
-            if prog.loc_audio_mid != -1 { gl::Uniform1f(prog.loc_audio_mid, get_mid()); }
-            if prog.loc_audio_treble != -1 { gl::Uniform1f(prog.loc_audio_treble, get_treble()); }
-            if prog.loc_audio_volume != -1 { gl::Uniform1f(prog.loc_audio_volume, get_volume()); }
-            if prog.loc_audio_peak_freq != -1 { gl::Uniform1f(prog.loc_audio_peak_freq, get_peak_freq()); }
-
-            gl::BindVertexArray(vao);
-            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
         }
         
         window.swap_buffers();
     }
 }
 
-fn get_mode_index(target_mode: &str, sources: &[(&str, &str)]) -> usize {
-    sources.iter()
-        .position(|&(name, _)| name.eq_ignore_ascii_case(target_mode))
+fn get_mode_index(target_mode: &str, defs: &[ShaderDef]) -> usize {
+    defs.iter()
+        .position(|def| def.name.eq_ignore_ascii_case(target_mode))
         .unwrap_or(0) 
 }
