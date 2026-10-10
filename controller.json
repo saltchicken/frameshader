@@ -1,5 +1,8 @@
 {
-  "mode": "warp/vortex",
+  "pipeline": [
+    "ascii/matrix/matrix",
+    "warp/vortex"
+  ],
 
   "crop": {
     "left": 0.0,
@@ -8,12 +11,10 @@
     "bottom": 0.0
   },
   
-  // Font Graphics Options
   "font_width": 2.0,
   "font_height": 4.0,
   "num_chars": 10.0,
   
-  // Live parameters
   "playback_fps": 30.0,
   "bpm_multiplier": 20.0,
   "sensitivity": 1.5,
@@ -31,7 +32,6 @@
   "vortex_color_separation": 0.015,
   "vortex_strobe_size": 0.4,
 
-  // Audio reactive parameters
   "audio": {
     "bass_bin_start": 1,
     "bass_bin_end": 3,

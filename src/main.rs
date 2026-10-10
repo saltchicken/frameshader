@@ -56,6 +56,12 @@ fn discover_shaders(dir: &Path, vert_src: &str, defs: &mut Vec<ShaderDef>) {
     }
 }
 
+fn get_shader_index(target_name: &str, defs: &[ShaderDef]) -> usize {
+    defs.iter()
+        .position(|def| def.name.eq_ignore_ascii_case(target_name))
+        .unwrap_or(0) 
+}
+
 fn main() {
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
     glfw.window_hint(glfw::WindowHint::ContextVersion(4, 6));
@@ -130,6 +136,16 @@ fn main() {
         gl::EnableVertexAttribArray(1);
     }
 
+    // Ping-Pong FBO Setup
+    let mut fbos = [0u32; 2];
+    let mut fbo_textures = [0u32; 2];
+    let mut current_fb_width = 0;
+    let mut current_fb_height = 0;
+    unsafe {
+        gl::GenFramebuffers(2, fbos.as_mut_ptr());
+        gl::GenTextures(2, fbo_textures.as_mut_ptr());
+    }
+
     let img = image::open("font_atlases/dejavu_sans_mono-10-8x16.png").expect("Failed to load font atlas").into_rgba8();
     let mut font_texture = 0;
     unsafe {
@@ -183,8 +199,11 @@ fn main() {
     
     if !Path::new(config_path).exists() {
         let default_config_str = r#"{
-  // The active shader mode uses the folder path and filename (e.g., "ascii/matrix/flux" or "warp/resonance")
-  "mode": "ascii/matrix/flux",
+  // The active shader pipeline processes sequentially from top to bottom
+  "pipeline": [
+    "filters/edge",
+    "warp/vortex"
+  ],
   
   // Crop parameters (0.0 to 1.0 for percentage of edges to remove)
   "crop": {
@@ -241,7 +260,6 @@ fn main() {
         .expect("Failed to watch shaders directory");
 
     let mut current_config = load_config(config_path);
-    let mut current_mode = get_mode_index(&current_config.mode, &shader_defs);
     
     let shared_audio_config = Arc::new(RwLock::new(current_config.audio.clone()));
     let audio_state = Arc::new(AudioState::default());
@@ -319,30 +337,50 @@ fn main() {
 
         if config_changed {
             current_config = load_config(config_path);
-            current_mode = get_mode_index(&current_config.mode, &shader_defs);
             
             if let Ok(mut lock) = shared_audio_config.write() {
                 *lock = current_config.audio.clone();
             }
             
-            println!("Config reloaded: Active Mode [{}], FPS: [{}], BPM Mult: [{}]", current_config.mode, current_config.playback_fps, current_config.bpm_multiplier);
+            println!("Config reloaded: Pipeline {:?}, FPS: [{}], BPM Mult: [{}]", current_config.pipeline, current_config.playback_fps, current_config.bpm_multiplier);
         }
 
         let (fb_width, fb_height) = window.get_framebuffer_size();
 
-        unsafe {
-            gl::Viewport(0, 0, fb_width, fb_height);
-            gl::ClearColor(0.1, 0.1, 0.1, 1.0);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
+        // Check if window resized, update FBO textures if necessary
+        if fb_width != current_fb_width || fb_height != current_fb_height {
+            current_fb_width = fb_width;
+            current_fb_height = fb_height;
+            unsafe {
+                for i in 0..2 {
+                    gl::BindFramebuffer(gl::FRAMEBUFFER, fbos[i]);
+                    gl::BindTexture(gl::TEXTURE_2D, fbo_textures[i]);
+                    gl::TexImage2D(
+                        gl::TEXTURE_2D, 0, gl::RGB as i32, 
+                        fb_width, fb_height, 
+                        0, gl::RGB, gl::UNSIGNED_BYTE, ptr::null()
+                    );
+                    gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+                    gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+                    gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+                    gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+                    
+                    gl::FramebufferTexture2D(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, gl::TEXTURE_2D, fbo_textures[i], 0);
+                    
+                    if gl::CheckFramebufferStatus(gl::FRAMEBUFFER) != gl::FRAMEBUFFER_COMPLETE {
+                        eprintln!("FBO {} is not complete!", i);
+                    }
+                }
+                gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+            }
         }
 
         let current_bpm = audio_state.get_bpm();
-
         let target_fps = if current_bpm > 0.0 {
             (current_bpm / 60.0) * current_config.bpm_multiplier 
         } else {
             current_config.playback_fps
-        } ;
+        };
 
         let safe_fps = if target_fps > 0.1 { target_fps } else { 0.1 };
         let frame_duration = Duration::from_secs_f32(1.0 / safe_fps);
@@ -359,71 +397,105 @@ fn main() {
             }
         }
 
-        // Fallback gracefully if the active shader failed to compile or the array is empty
-        if !shader_defs.is_empty() {
-            if let Some(prog) = &shader_defs[current_mode].program {
-                unsafe {
-                    gl::ActiveTexture(gl::TEXTURE0);
-                    gl::BindTexture(gl::TEXTURE_2D, video_texture);
-                    
-                    if update_texture {
-                        // Upload native OpenCV BGR frame directly to GPU
-                        gl::TexSubImage2D(
-                            gl::TEXTURE_2D, 0, 0, 0, 
-                            cam_width, cam_height, 
-                            gl::BGR, gl::UNSIGNED_BYTE, 
-                            frame.data() as *const _
-                        );
-                    }
+        unsafe {
+            if update_texture {
+                gl::ActiveTexture(gl::TEXTURE0);
+                gl::BindTexture(gl::TEXTURE_2D, video_texture);
+                // Upload native OpenCV BGR frame directly to GPU
+                gl::TexSubImage2D(
+                    gl::TEXTURE_2D, 0, 0, 0, 
+                    cam_width, cam_height, 
+                    gl::BGR, gl::UNSIGNED_BYTE, 
+                    frame.data() as *const _
+                );
+            }
+        }
 
-                    gl::UseProgram(prog.id);
-                    
-                    // HashMap-driven Uniform Dispatch
-                    for (name, &loc) in &prog.uniforms {
-                        match name.as_str() {
-                            "videoTexture" => gl::Uniform1i(loc, 0),
-                            "fontAtlas" => gl::Uniform1i(loc, 1),
-                            "resolution" => gl::Uniform2f(loc, fb_width as f32, fb_height as f32),
-                            "charSize" => gl::Uniform2f(loc, current_config.font_width, current_config.font_height),
-                            "numChars" => gl::Uniform1f(loc, current_config.num_chars),
-                            "time" => gl::Uniform1f(loc, glfw.get_time() as f32),
-                            "crop" => {
-                                let (c_l, c_r, c_t, c_b) = current_config.crop.sanitize();
-                                gl::Uniform4f(loc, c_l, c_r, c_t, c_b);
-                            },
-                            "sensitivity" => gl::Uniform1f(loc, current_config.sensitivity),
-                            "rain_speed" => gl::Uniform1f(loc, current_config.rain_speed),
-                            "tail_length" => gl::Uniform1f(loc, current_config.tail_length),
-                            "flicker_speed" => gl::Uniform1f(loc, current_config.flicker_speed),
-                            "resonance_ripples" => gl::Uniform1f(loc, current_config.resonance_ripples),
-                            "vortex_speed" => gl::Uniform1f(loc, current_config.vortex_speed),
-                            "vortex_arms" => gl::Uniform1f(loc, current_config.vortex_arms),
-                            "vortex_spin" => gl::Uniform1f(loc, current_config.vortex_spin),
-                            "vortex_center_size" => gl::Uniform1f(loc, current_config.vortex_center_size),
-                            "vortex_fov" => gl::Uniform1f(loc, current_config.vortex_fov),
-                            "vortex_color_separation" => gl::Uniform1f(loc, current_config.vortex_color_separation),
-                            "vortex_strobe_size" => gl::Uniform1f(loc, current_config.vortex_strobe_size),
-                            "audio_bass" => gl::Uniform1f(loc, audio_state.get_bass()),
-                            "audio_mid" => gl::Uniform1f(loc, audio_state.get_mid()),
-                            "audio_treble" => gl::Uniform1f(loc, audio_state.get_treble()),
-                            "audio_volume" => gl::Uniform1f(loc, audio_state.get_volume()),
-                            "audio_peak_freq" => gl::Uniform1f(loc, audio_state.get_peak_freq()),
-                            _ => {} // Ignore unexpected uniforms gracefully
+        let pipeline_len = current_config.pipeline.len();
+
+        if pipeline_len > 0 && !shader_defs.is_empty() {
+            for (i, shader_name) in current_config.pipeline.iter().enumerate() {
+                let is_first = i == 0;
+                let is_last = i == pipeline_len - 1;
+
+                let shader_idx = get_shader_index(shader_name, &shader_defs);
+                if let Some(prog) = &shader_defs[shader_idx].program {
+                    unsafe {
+                        // Bind target FBO (or 0 for the final output pass to the screen)
+                        if is_last {
+                            gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+                        } else {
+                            gl::BindFramebuffer(gl::FRAMEBUFFER, fbos[i % 2]);
                         }
-                    }
+                        
+                        gl::Viewport(0, 0, fb_width, fb_height);
+                        gl::ClearColor(0.1, 0.1, 0.1, 1.0);
+                        gl::Clear(gl::COLOR_BUFFER_BIT);
 
-                    gl::BindVertexArray(vao);
-                    gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
+                        gl::UseProgram(prog.id);
+                        
+                        // Bind Texture 0 (Input)
+                        gl::ActiveTexture(gl::TEXTURE0);
+                        if is_first {
+                            gl::BindTexture(gl::TEXTURE_2D, video_texture);
+                        } else {
+                            // Read from the previous pass's FBO
+                            gl::BindTexture(gl::TEXTURE_2D, fbo_textures[(i - 1) % 2]);
+                        }
+
+                        // Bind Texture 1 (Font Atlas)
+                        gl::ActiveTexture(gl::TEXTURE1);
+                        gl::BindTexture(gl::TEXTURE_2D, font_texture);
+                        
+                        // HashMap-driven Uniform Dispatch
+                        for (name, &loc) in &prog.uniforms {
+                            match name.as_str() {
+                                "videoTexture" => gl::Uniform1i(loc, 0),
+                                "fontAtlas" => gl::Uniform1i(loc, 1),
+                                "resolution" => gl::Uniform2f(loc, fb_width as f32, fb_height as f32),
+                                "charSize" => gl::Uniform2f(loc, current_config.font_width, current_config.font_height),
+                                "numChars" => gl::Uniform1f(loc, current_config.num_chars),
+                                "time" => gl::Uniform1f(loc, glfw.get_time() as f32),
+                                "crop" => {
+                                    let (c_l, c_r, c_t, c_b) = current_config.crop.sanitize();
+                                    gl::Uniform4f(loc, c_l, c_r, c_t, c_b);
+                                },
+                                "sensitivity" => gl::Uniform1f(loc, current_config.sensitivity),
+                                "rain_speed" => gl::Uniform1f(loc, current_config.rain_speed),
+                                "tail_length" => gl::Uniform1f(loc, current_config.tail_length),
+                                "flicker_speed" => gl::Uniform1f(loc, current_config.flicker_speed),
+                                "resonance_ripples" => gl::Uniform1f(loc, current_config.resonance_ripples),
+                                "vortex_speed" => gl::Uniform1f(loc, current_config.vortex_speed),
+                                "vortex_arms" => gl::Uniform1f(loc, current_config.vortex_arms),
+                                "vortex_spin" => gl::Uniform1f(loc, current_config.vortex_spin),
+                                "vortex_center_size" => gl::Uniform1f(loc, current_config.vortex_center_size),
+                                "vortex_fov" => gl::Uniform1f(loc, current_config.vortex_fov),
+                                "vortex_color_separation" => gl::Uniform1f(loc, current_config.vortex_color_separation),
+                                "vortex_strobe_size" => gl::Uniform1f(loc, current_config.vortex_strobe_size),
+                                "audio_bass" => gl::Uniform1f(loc, audio_state.get_bass()),
+                                "audio_mid" => gl::Uniform1f(loc, audio_state.get_mid()),
+                                "audio_treble" => gl::Uniform1f(loc, audio_state.get_treble()),
+                                "audio_volume" => gl::Uniform1f(loc, audio_state.get_volume()),
+                                "audio_peak_freq" => gl::Uniform1f(loc, audio_state.get_peak_freq()),
+                                _ => {} // Ignore unexpected uniforms gracefully
+                            }
+                        }
+
+                        gl::BindVertexArray(vao);
+                        gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null());
+                    }
                 }
+            }
+        } else {
+            // Fallback clear if no shaders are loaded or pipeline is empty
+            unsafe {
+                gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+                gl::Viewport(0, 0, fb_width, fb_height);
+                gl::ClearColor(0.1, 0.1, 0.1, 1.0);
+                gl::Clear(gl::COLOR_BUFFER_BIT);
             }
         }
         
         window.swap_buffers();
     }
-}
-
-fn get_mode_index(target_mode: &str, defs: &[ShaderDef]) -> usize {
-    defs.iter()
-        .position(|def| def.name.eq_ignore_ascii_case(target_mode))
-        .unwrap_or(0) 
 }

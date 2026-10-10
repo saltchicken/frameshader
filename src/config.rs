@@ -64,7 +64,7 @@ impl CropConfig {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)]
 pub struct ShaderConfig {
-    pub mode: String,
+    pub pipeline: Vec<String>,
     pub crop: CropConfig,
     pub font_width: f32,
     pub font_height: f32,
@@ -89,7 +89,7 @@ pub struct ShaderConfig {
 impl Default for ShaderConfig {
     fn default() -> Self {
         Self {
-            mode: "ascii/matrix/flux".to_string(),
+            pipeline: vec!["filters/edge".to_string(), "warp/vortex".to_string()],
             crop: CropConfig::default(),
             font_width: 8.0,
             font_height: 16.0,
