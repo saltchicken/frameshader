@@ -270,6 +270,7 @@ fn main() {
         ("Paint", include_str!("../shaders/frag/paint.frag")),
         ("NightVision", include_str!("../shaders/frag/nightvision.frag")),
         ("Dither", include_str!("../shaders/frag/dither.frag")),
+        ("Resonance", include_str!("../shaders/frag/resonance.frag")),
     ];
 
     let mut shader_programs = Vec::new();
@@ -676,8 +677,15 @@ where
                     let new_volume = if raw_volume > old_volume { raw_volume } else { old_volume * cfg.smoothing_old + raw_volume * cfg.smoothing_new };
                     store_volume(new_volume);
 
-                    let peak_freq = (peak_bin as f32 * sample_rate) / AUDIO_BUFFER_SIZE as f32;
-                    store_peak_freq(peak_freq);
+                    let raw_peak_freq = (peak_bin as f32 * sample_rate) / AUDIO_BUFFER_SIZE as f32;
+                    let old_peak_freq = get_peak_freq();
+                    
+                    // Smooth both the attack and decay of the frequency shifts
+                    // 0.9 old / 0.1 new heavily dampens the erratic jumps. 
+                    // Increase 0.9 (e.g., 0.95) to make it even slower, or decrease it to make it faster.
+                    let new_peak_freq = (old_peak_freq * 0.9) + (raw_peak_freq * 0.1);
+                    
+                    store_peak_freq(new_peak_freq);
 
                     idx = 0;
                 }
