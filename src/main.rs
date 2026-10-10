@@ -205,6 +205,8 @@ fn main() {
         ("Flux", include_str!("../shaders/frag/ascii_matrix_flux.frag")),
         ("CRT", include_str!("../shaders/frag/crt.frag")),
         ("Edge", include_str!("../shaders/frag/edge.frag")),
+        ("VHS", include_str!("../shaders/frag/vhs.frag")),
+        ("Halftone", include_str!("../shaders/frag/halftone.frag")),
     ];
 
     let mut shader_programs = Vec::new();
@@ -245,7 +247,7 @@ fn main() {
     // Create default file if it doesn't exist, using a raw string to preserve comments
     if !std::path::Path::new(config_path).exists() {
         let default_config_str = r#"{
-  // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux"
+  // The active shader mode. Options: "ASCII", "Matrix", "Color", "Flux", "CRT", "Edge", "VHS", "Halftone"
   "mode": "Flux",
   
   // Font Graphics Options
@@ -274,31 +276,20 @@ fn main() {
 
   // ==========================================
   // COMMENTED OUT EXAMPLES
-  // Uncomment the mode you want and adjust!
   // ==========================================
 
   /*
-  // Basic ASCII (Only uses sensitivity)
-  "mode": "ASCII",
+  // VHS Glitch Mode
+  "mode": "VHS",
+  "playback_fps": 30.0,
+  "sensitivity": 1.5,
+  */
+
+  /*
+  // Halftone Dot Mode
+  "mode": "Halftone",
   "playback_fps": 30.0,
   "sensitivity": 1.0,
-  */
-
-  /*
-  // Classic Matrix (Green rain interacting with brightness)
-  "mode": "Matrix",
-  "playback_fps": 24.0,
-  "sensitivity": 2.0,
-  "rain_speed": 0.3,
-  "tail_length": 0.25,
-  */
-
-  /*
-  // Color Matrix (Rain taking the colors of the camera)
-  "mode": "Color",
-  "playback_fps": 30.0,
-  "rain_speed": 0.3,
-  "tail_length": 0.25,
   */
 }"#;
         fs::write(config_path, default_config_str).unwrap();
