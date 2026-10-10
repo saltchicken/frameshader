@@ -110,36 +110,21 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let config_path = "controller.json";
 
-    // Setup default config if it doesn't exist (updated with video_input)
+    // Setup default config if it doesn't exist
     if !Path::new(config_path).exists() {
         let default_config_str = r#"{
   "video_input": null,
   "pipeline": [
     {
-      "name": "filters/edge",
+      "name": "ascii/matrix/flux",
       "params": {
-        "sensitivity": 1.2
-      }
-    },
-    {
-      "name": "warp/vortex",
-      "params": {
-        "sensitivity": 1.5,
-        "vortex_speed": 1.5,
-        "vortex_arms": 4.0,
-        "vortex_spin": 0.4,
-        "vortex_center_size": 0.05,
-        "vortex_fov": 0.5,
-        "vortex_color_separation": 0.015,
-        "vortex_strobe_size": 0.4
+        "sensitivity": 1.5
       }
     }
   ],
   "globals": {
     "rain_speed": 0.4,
     "tail_length": 0.3,
-    "flicker_speed": 15.0,
-    "resonance_ripples": 30.0,
     "font_width": 8.0,
     "font_height": 16.0,
     "num_chars": 10.0
@@ -165,7 +150,7 @@ fn main() {
         Some(args[1].clone())
     } else {
         current_config.video_input.clone()
-    };
+    } ;
 
     let (mut cam, mut is_file, mut has_camera, mut cam_width, mut cam_height, mut _fps) = 
         init_camera(initial_input.as_deref());

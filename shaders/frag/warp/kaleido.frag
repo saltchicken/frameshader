@@ -5,7 +5,7 @@ in vec2 TexCoord;
 uniform sampler2D videoTexture;
 uniform vec2 resolution;
 uniform float time;
-uniform float sensitivity;
+uniform float sensitivity = 1.0;
 
 // --- AUDIO UNIFORMS ---
 uniform float audio_bass;
@@ -13,9 +13,9 @@ uniform float audio_mid;
 uniform float audio_treble;
 
 // --- CONFIGURABLE PARAMS ---
-// These will fall back to the defaults below if not in controller.json
-uniform float segments;
-uniform float spin_speed;
+// Defaults set directly in the shader!
+uniform float segments = 6.0;
+uniform float spin_speed = 0.2;
 
 #define PI 3.141592653589793
 
@@ -30,15 +30,14 @@ void main() {
 
     // 3. Audio-reactive spin and zoom
     // Mids drive the rotation speed, bass pumps the zoom
-    float spin = time * (spin_speed == 0.0 ? 0.2 : spin_speed) + (audio_mid * 0.5 * sensitivity);
+    float spin = time * spin_speed + (audio_mid * 0.5 * sensitivity);
     theta += spin;
 
     float zoom = 1.0 - (audio_bass * 0.15 * sensitivity);
     r *= zoom;
 
     // 4. Kaleidoscope folding math
-    float active_segments = segments == 0.0 ? 6.0 : segments;
-    float slice = (PI * 2.0) / active_segments;
+    float slice = (PI * 2.0) / segments;
     
     // Wrap the angle into a single slice, then mirror it so edges align seamlessly
     theta = mod(theta, slice);

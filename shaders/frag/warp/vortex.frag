@@ -5,7 +5,7 @@ in vec2 TexCoord;
 uniform sampler2D videoTexture;
 uniform vec2 resolution;
 uniform float time;
-uniform float sensitivity;
+uniform float sensitivity = 1.0;
 
 uniform float audio_bass;
 uniform float audio_mid;
@@ -13,13 +13,14 @@ uniform float audio_treble;
 uniform float audio_volume;
 uniform float audio_peak_freq;
 
-uniform float vortex_speed;
-uniform float vortex_arms;
-uniform float vortex_spin;
-uniform float vortex_center_size;
-uniform float vortex_fov;
-uniform float vortex_color_separation;
-uniform float vortex_strobe_size;
+// Default values set directly in the shader!
+uniform float vortex_speed = 1.5;
+uniform float vortex_arms = 4.0;
+uniform float vortex_spin = 0.4;
+uniform float vortex_center_size = 0.05;
+uniform float vortex_fov = 0.5;
+uniform float vortex_color_separation = 0.015;
+uniform float vortex_strobe_size = 0.4;
 
 #define PI 3.141592653589793
 
