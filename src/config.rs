@@ -73,6 +73,8 @@ pub struct PipelineStage {
 #[serde(default)]
 pub struct ShaderConfig {
     pub video_input: Option<String>,
+    pub active_preset: Option<String>,
+    pub presets: HashMap<String, Vec<PipelineStage>>,
     pub pipeline: Vec<PipelineStage>,
     pub globals: HashMap<String, f32>,
     pub crop: CropConfig,
@@ -90,6 +92,8 @@ impl Default for ShaderConfig {
 
         Self {
             video_input: None,
+            active_preset: None,
+            presets: HashMap::new(),
             pipeline: vec![default_stage],
             globals: HashMap::new(),
             crop: CropConfig::default(),
@@ -97,6 +101,20 @@ impl Default for ShaderConfig {
             bpm_multiplier: 15.0,
             audio: AudioConfig::default(),
         }
+    }
+}
+
+impl ShaderConfig {
+    pub fn get_active_pipeline(&self) -> &Vec<PipelineStage> {
+        if let Some(preset_name) = &self.active_preset {
+            if let Some(preset_pipeline) = self.presets.get(preset_name) {
+                return preset_pipeline;
+            } else {
+                eprintln!("Warning: active_preset '{}' not found in presets.", preset_name);
+            }
+        }
+        // Fallback to the default pipeline if no valid preset is active
+        &self.pipeline
     }
 }
 

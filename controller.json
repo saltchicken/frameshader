@@ -1,6 +1,35 @@
 {
   "video_input": "/home/saltchicken/Projects/frameshader-rs/videos/forest_video.mp4",
-  "pipeline": [
+
+  "active_preset": "geo_kaleido",
+
+  "presets": {
+    "trippy_vortex": [
+      {
+        "name": "warp/vortex",
+        "params": {
+          "sensitivity": 0.2,
+          "vortex_radius": 1.5,
+          "spin_speed": -0.1
+        }
+      }
+    ],
+    "geo_kaleido": [
+      {
+        "name": "warp/kaleido",
+        "params": {
+          "segments": 40.0,
+          "spin_speed": -0.1
+        }
+      },
+      {
+        "name": "geo/topography",
+        "params": {
+          "sensitivity": 1.0
+        }
+      }
+    ],
+    "ascii_edge": [
     {
       "name": "ascii/audio_react",
       "params": {
@@ -12,44 +41,29 @@
         "noise_gate": 0.15
       }
     },
-
-  //   {
-  //     "name": "warp/vortex",
-  //     "params": {
-  //       "sensitivity": 0.2,
-  //       "swirl_strength": 0.1,
-  //       "vortex_radius": 1.5,
-  //       "spin_speed": -0.1,
-  //       "bass_gain": 1.0,
-  //       "mid_gain": 1.0,
-  //       "treble_gain": 0.0,
-  //       "vol_gain": 1.0,
-  //       "noise_gate": 0.15
-  //   }
-  // },
-
-    // {
-    //   "name": "warp/kaleido",
-    //   "params": {
-    //     "sensitivity": 1.2,
-    //     "segments": 40.0,
-    //     "spin_speed": -0.1
-    //   }
-    // },
-    {
+          {
       "name": "filters/edge",
       "params": {
         "sensitivity": 1.2
       }
     },
-    // {
-    //   "name": "warp/resonance",
-    //   "params": {
-    //     "sensitivity": 2.0,
-    //     "resonance_ripples": 10.0
-    //   }
-    // },
 
+
+    ]
+  },
+
+  "pipeline": [
+    {
+      "name": "ascii/matrix/matrix",
+      "params": {
+        "sensitivity": 1.0,
+        "bass_gain": 0.5,
+        "mid_gain": 0.2,
+        "treble_gain": 0.8,
+        "vol_gain": 1.5,
+        "noise_gate": 0.15
+      }
+    },
   ],
 
   // Globals are fallback uniforms if a stage doesn't define them in 'params'

@@ -114,6 +114,8 @@ fn main() {
     if !Path::new(config_path).exists() {
         let default_config_str = r#"{
   "video_input": null,
+  "active_preset": null,
+  "presets": {},
   "pipeline": [
     {
       "name": "ascii/matrix/flux",
@@ -405,10 +407,11 @@ fn main() {
             }
         }
 
-        let pipeline_len = current_config.pipeline.len();
+        let active_pipeline = current_config.get_active_pipeline();
+        let pipeline_len = active_pipeline.len();
 
         if pipeline_len > 0 && !shader_defs.is_empty() {
-            for (i, stage) in current_config.pipeline.iter().enumerate() {
+            for (i, stage) in active_pipeline.iter().enumerate() {
                 let is_first = i == 0;
                 let is_last = i == pipeline_len - 1;
 
