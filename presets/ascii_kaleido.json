@@ -1,0 +1,21 @@
+[
+  {
+    "name": "warp/kaleido",
+    "params": {
+      "segments": 6.0,
+      "spin_speed": 0.15,
+      "sensitivity": 1.0
+    }
+  },
+  {
+    "name": "ascii/audio_react",
+    "params": {
+      "sensitivity": 0.6,
+      "bass_gain": 1.5,
+      "mid_gain": 0.5,
+      "treble_gain": 0.4,
+      "vol_gain": 0.2,
+      "noise_gate": 0.1
+    }
+  }
+]

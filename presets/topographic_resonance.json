@@ -1,0 +1,15 @@
+[
+  {
+    "name": "geo/topography",
+    "params": {
+      "sensitivity": 1.2
+    }
+  },
+  {
+    "name": "warp/resonance",
+    "params": {
+      "sensitivity": 1.5,
+      "resonance_ripples": 12.0
+    }
+  }
+]

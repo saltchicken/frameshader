@@ -1,0 +1,25 @@
+[
+  {
+    "name": "warp/vortex",
+    "params": {
+      "swirl_strength": 5.0,
+      "vortex_radius": 1.2,
+      "spin_speed": 0.3,
+      "sensitivity": 1.2,
+      "bass_gain": 1.0,
+      "mid_gain": 0.0,     // Mutes mids
+      "treble_gain": 0.0,  // Mutes treble
+      "vol_gain": 0.0,     // Mutes overall volume reactions
+      "noise_gate": 0.15
+    }
+  },
+  {
+    "name": "ascii/matrix/flux",
+    "params": {
+      "sensitivity": 1.8,
+      "rain_speed": 0.45,
+      "tail_length": 0.35,
+      "flicker_speed": 20.0
+    }
+  }
+]

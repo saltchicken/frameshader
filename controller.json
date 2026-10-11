@@ -1,7 +1,7 @@
 {
   "video_input": "/home/saltchicken/Projects/frameshader-rs/videos/forest.mp4",
 
-  "active_preset": "ascii_edge",
+  "active_preset": "matrix_vortex",
 
   "pipeline": [
     {
