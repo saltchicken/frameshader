@@ -1,8 +1,8 @@
 [
   {
-    "name": "warp/vortex",
+    "name": "warp/vortex2",
     "params": {
-      "sensitivity": 0.2,
+      "sensitivity": 0.5,
       "vortex_radius": 1.5,
       "spin_speed": -0.1
     }
