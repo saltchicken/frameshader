@@ -1,5 +1,5 @@
 {
-  "video_input": "/home/saltchicken/Projects/frameshader-rs/videos/forest_video.mp4",
+  "video_input": "/home/saltchicken/Projects/frameshader-rs/videos/forest.mp4",
 
   "active_preset": "ascii_edge",
 
@@ -44,13 +44,13 @@
     "treble_bin_end": 100,   // ~8600 Hz
     
     // Temporal smoothing for audio reactivity
-    "smoothing_old": 0.7,    // Weight of previous frame
-    "smoothing_new": 0.3,    // Weight of current frame
+    "smoothing_old": 0.1,    // Weight of previous frame
+    "smoothing_new": 0.1,    // Weight of current frame
     
     // Normalization factors (Higher = less reactive to that frequency band)
-    "bass_norm_factor": 84.0,
-    "mid_norm_factor": 290.0,
-    "treble_norm_factor": 600.0,
+    "bass_norm_factor": 50.0,
+    "mid_norm_factor": 100.0,
+    "treble_norm_factor": 200.0,
     "volume_norm_factor": 500.0
   }
 }
